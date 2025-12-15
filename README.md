@@ -1,4 +1,4 @@
-# 🇩🇪 Deutsch Journey
+# Deutsch Journey
 
 **Deutsch Journey** adalah aplikasi web interaktif dan komprehensif yang dirancang untuk membantu pengguna mempelajari bahasa Jerman secara terstruktur. Dibangun dengan teknologi web modern, aplikasi ini menggabungkan materi pelajaran, latihan interaktif, flashcard, dan pelacakan kemajuan pengguna secara *real-time*.
 
