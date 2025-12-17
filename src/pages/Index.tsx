@@ -1,15 +1,17 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, BookOpen, CreditCard, BarChart3, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-// 1. Import fungsi & tipe dari lessons.ts yang baru
 import { getLevelsFromDB, Level } from "@/data/lessons"; 
 import { useState, useEffect } from "react";
+// 1. Import Auth Context
+import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
-  // 2. Definisikan state 'levels' supaya variabelnya ADA dan tidak error
   const [levels, setLevels] = useState<Level[]>([]); 
+  
+  // 2. Ambil data user dari AuthContext
+  const { user } = useAuth();
 
-  // 3. Panggil data dari database pas halaman dimuat
   useEffect(() => {
     const initData = async () => {
       const data = await getLevelsFromDB();
@@ -40,13 +42,16 @@ const Index = () => {
               flashcard interaktif, dan pelacakan progress otomatis.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/material/A1">
+              {/* LOGIKA PROTEKSI: Kalau user ada, ke materi. Kalau tidak, ke login */}
+              <Link to={user ? "/material/A1" : "/login"}>
                 <Button size="lg" className="w-full sm:w-auto text-lg px-8">
                   Mulai Belajar A1
                   <ArrowRight className="ml-2" size={20} />
                 </Button>
               </Link>
-              <Link to="/flashcard">
+              
+              {/* LOGIKA PROTEKSI FLASHCARD */}
+              <Link to={user ? "/flashcard" : "/login"}>
                 <Button size="lg" variant="outline" className="w-full sm:w-auto text-lg px-8">
                   Coba Flashcard
                 </Button>
@@ -68,11 +73,11 @@ const Index = () => {
           </h2>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Bagian ini SEKARANG AMAN karena 'levels' sudah ada di state */}
             {levels.map((level, index) => (
               <Link
                 key={level.id}
-                to={`/level/${level.id}`}
+                // LOGIKA PROTEKSI LEVEL
+                to={user ? `/level/${level.id}` : "/login"}
                 className="group border-4 border-foreground bg-card p-6 hover:shadow-md transition-all hover:-translate-y-1"
               >
                 <div className="flex items-center gap-3 mb-4">
@@ -140,7 +145,9 @@ const Index = () => {
           <p className="text-lg opacity-80 mb-8 max-w-xl mx-auto">
             Buat akun. Progress tersimpan otomatis. Mulai belajar sekarang dan ketahui program yang cocok denganmu!
           </p>
-          <Link to="/mein-weg">
+          
+          {/* LOGIKA PROTEKSI MEIN WEG */}
+          <Link to={user ? "/mein-weg" : "/login"}>
             <Button size="lg" variant="secondary" className="text-lg px-8">
               Ketahui Programmu
               <ArrowRight className="ml-2" size={20} />
