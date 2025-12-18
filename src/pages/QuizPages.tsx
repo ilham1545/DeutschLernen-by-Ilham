@@ -11,8 +11,22 @@ import confetti from "canvas-confetti";
 
 const QuizPage = () => {
   const { levelId } = useParams();
-  const quiz = quizzes[levelId as string] || quizzes["A1"]; // Default A1 jika not found
+  // LOGIKA BARU: Cek dulu ada gak, kalau gak ada JANGAN default ke A1 sembarangan
+  const quiz = quizzes[levelId as string]; 
 
+  // Kalo quiz gak ketemu, tampilin pesan error atau redirect balik
+  if (!quiz) {
+    return (
+      <div className="container mx-auto px-4 py-20 text-center">
+        <h1 className="text-3xl font-black mb-4">Waduh! 😅</h1>
+        <p className="text-lg text-slate-600 mb-8">Quiz untuk level <span className="font-bold text-red-500">{levelId}</span> belum tersedia saat ini.</p>
+        <Link to="/">
+          <Button size="lg" className="font-bold border-2 border-black">Kembali ke Home</Button>
+        </Link>
+      </div>
+    );
+  }
+  
   const [currentIdx, setCurrentIdx] = useState(0);
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
