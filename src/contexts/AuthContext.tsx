@@ -123,6 +123,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email,
       password,
       options: {
+        
+        emailRedirectTo: "https://mein-weg.vercel.app/login",
         data: {
           full_name: fullName,
           username: username,
