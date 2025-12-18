@@ -220,7 +220,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const SITE_URL = "https://mein-weg.vercel.app";
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: '${SITE_URL}/update-password',
+        redirectTo: `${SITE_URL}/update-password`,
     });
 
     if (error) {
