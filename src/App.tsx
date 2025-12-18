@@ -23,8 +23,11 @@ import RegisterPage from "@/pages/RegisterPage";
 import DashboardPage from "@/pages/DashboardPage";
 import ScrollToTop from "@/components/ScrollToTop";
 import AdminPage from "./pages/AdminPage";
+import ForgotPassword from "./pages/ForgotPasswordPage"
 
 import "./App.css";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import UpdatePasswordPage from "./pages/UpdatePasswordPage";
 
 const queryClient = new QueryClient();
 
@@ -60,6 +63,8 @@ const MainLayout = () => {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/update-password" element={<UpdatePasswordPage />} />
           
           {/* Admin Page */}
           <Route path="/admin" element={<AdminPage />} />
