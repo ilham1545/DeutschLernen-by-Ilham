@@ -1,82 +1,130 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { quizzes } from "@/data/quiz";
+import { supabase } from "@/lib/supabase"; // Pastikan import supabase benar
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { CheckCircle2, XCircle, Trophy, RefreshCcw, ArrowRight, Share2, Award } from "lucide-react";
+import { CheckCircle2, XCircle, Trophy, RefreshCcw, ArrowRight, Share2, Award, Loader2, FileWarning } from "lucide-react";
 import { cn } from "@/lib/utils";
 import confetti from "canvas-confetti";
 
+// Tipe data sesuai database
+interface QuizQuestion {
+  id: string;
+  type: "multiple-choice" | "fill-blank" | "reorder";
+  question: string;
+  options?: string[];
+  correct_answer: string | string[]; // Di DB namanya correct_answer (snake_case)
+  explanation: string;
+}
+
+interface QuizData {
+  id: string;
+  level: string;
+  title: string;
+  questions: QuizQuestion[];
+}
+
 const QuizPage = () => {
   const { levelId } = useParams();
-  // LOGIKA BARU: Cek dulu ada gak, kalau gak ada JANGAN default ke A1 sembarangan
-  const quiz = quizzes[levelId as string]; 
-
-  // Kalo quiz gak ketemu, tampilin pesan error atau redirect balik
-  if (!quiz) {
-    return (
-      <div className="container mx-auto px-4 py-20 text-center">
-        <h1 className="text-3xl font-black mb-4">Waduh! 😅</h1>
-        <p className="text-lg text-slate-600 mb-8">Quiz untuk level <span className="font-bold text-red-500">{levelId}</span> belum tersedia saat ini.</p>
-        <Link to="/">
-          <Button size="lg" className="font-bold border-2 border-black">Kembali ke Home</Button>
-        </Link>
-      </div>
-    );
-  }
   
+  // State Data
+  const [quiz, setQuiz] = useState<QuizData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // State Gameplay
   const [currentIdx, setCurrentIdx] = useState(0);
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
   
-  // State untuk jawaban user
+  // State Jawaban User
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [textAnswer, setTextAnswer] = useState("");
   const [reorderList, setReorderList] = useState<string[]>([]);
   const [wordBank, setWordBank] = useState<string[]>([]);
 
-  const currentQ = quiz.questions[currentIdx];
-  const isFinished = showResult;
+  // --- 1. FETCH DATA DARI SUPABASE ---
+  useEffect(() => {
+    const fetchQuiz = async () => {
+      setLoading(true);
+      setError(null);
 
-  // Init Reorder Question
-  useState(() => {
-    if (currentQ.type === "reorder") {
-      setWordBank([...(currentQ.options || [])].sort(() => Math.random() - 0.5));
+      try {
+        // A. Ambil Header Quiz
+        const { data: quizData, error: quizError } = await supabase
+          .from("quizzes")
+          .select("*")
+          .eq("level", levelId)
+          .single();
+
+        if (quizError || !quizData) {
+            throw new Error("Quiz tidak ditemukan.");
+        }
+
+        // B. Ambil Pertanyaan
+        const { data: questionsData, error: qError } = await supabase
+          .from("quiz_questions")
+          .select("*")
+          .eq("quiz_id", quizData.id)
+          .order("order_index", { ascending: true });
+
+        if (qError) throw qError;
+
+        setQuiz({
+            ...quizData,
+            questions: questionsData || []
+        });
+
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (levelId) fetchQuiz();
+  }, [levelId]);
+
+  // --- LOGIKA SETELAH DATA LOAD ---
+  const currentQ = quiz?.questions[currentIdx];
+
+  // Init Word Bank untuk soal Reorder
+  useEffect(() => {
+    if (currentQ?.type === "reorder") {
+      // Ambil opsi dari DB, lalu acak
+      const opts = currentQ.options ? [...currentQ.options] : [];
+      setWordBank(opts.sort(() => Math.random() - 0.5));
+      setReorderList([]);
     }
-  });
+  }, [currentQ]);
 
   const handleNext = () => {
-    // Reset state
     setFeedback(null);
     setSelectedOption(null);
     setTextAnswer("");
     setReorderList([]);
     
-    if (currentIdx < quiz.questions.length - 1) {
+    if (quiz && currentIdx < quiz.questions.length - 1) {
       setCurrentIdx(curr => curr + 1);
-      // Init next word bank if needed
-      const nextQ = quiz.questions[currentIdx + 1];
-      if (nextQ.type === "reorder") {
-        setWordBank([...(nextQ.options || [])].sort(() => Math.random() - 0.5));
-      }
     } else {
       setShowResult(true);
-      if (score / quiz.questions.length > 0.8) fireConfetti();
+      if (quiz && score / quiz.questions.length > 0.8) fireConfetti();
     }
   };
 
   const checkAnswer = () => {
+    if (!currentQ) return;
     let isCorrect = false;
 
     if (currentQ.type === "multiple-choice") {
-      isCorrect = selectedOption === currentQ.correctAnswer;
+      isCorrect = selectedOption === currentQ.correct_answer;
     } else if (currentQ.type === "fill-blank") {
-      isCorrect = textAnswer.trim().toLowerCase() === (currentQ.correctAnswer as string).toLowerCase();
+      isCorrect = textAnswer.trim().toLowerCase() === (currentQ.correct_answer as string).toLowerCase();
     } else if (currentQ.type === "reorder") {
-      isCorrect = JSON.stringify(reorderList) === JSON.stringify(currentQ.correctAnswer);
+      isCorrect = JSON.stringify(reorderList) === JSON.stringify(currentQ.correct_answer);
     }
 
     if (isCorrect) {
@@ -91,9 +139,8 @@ const QuizPage = () => {
     confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
   };
 
-  // --- LOGIKA REORDER (KLIK PINDAH) ---
   const moveWord = (word: string, from: "bank" | "answer") => {
-    if (feedback) return; // Freeze jika sudah jawab
+    if (feedback) return;
     if (from === "bank") {
       setWordBank(prev => prev.filter(w => w !== word));
       setReorderList(prev => [...prev, word]);
@@ -103,7 +150,35 @@ const QuizPage = () => {
     }
   };
 
-  // --- RENDER HASIL (SERTIFIKAT) ---
+  // --- TAMPILAN LOADING ---
+  if (loading) {
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+            <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+            <p className="font-bold text-slate-500">Menyiapkan soal ujian...</p>
+        </div>
+    );
+  }
+
+  // --- TAMPILAN ERROR / KOSONG ---
+  if (error || !quiz || quiz.questions.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center border-4 border-foreground p-8 rounded-xl shadow-lg max-w-md bg-white">
+          <FileWarning className="h-16 w-16 text-slate-400 mx-auto mb-4" />
+          <h1 className="text-2xl font-black mb-2">Quiz Tidak Ditemukan</h1>
+          <p className="text-slate-600 mb-6">
+            Mungkin level <span className="font-bold text-red-500">{levelId}</span> belum memiliki soal di database.
+          </p>
+          <Link to="/">
+            <Button size="lg" className="font-bold border-2 border-foreground bg-yellow-400 hover:bg-yellow-500 text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none">Kembali ke Home</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // --- TAMPILAN HASIL (SERTIFIKAT) ---
   if (showResult) {
     const percentage = Math.round((score / quiz.questions.length) * 100);
     const passed = percentage >= 80;
@@ -148,6 +223,8 @@ const QuizPage = () => {
     );
   }
 
+  if (!currentQ) return null; // Safe guard
+
   // --- RENDER PERTANYAAN ---
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -175,7 +252,7 @@ const QuizPage = () => {
                     className={cn(
                       "w-full text-left p-4 rounded-xl border-2 font-bold transition-all",
                       selectedOption === opt ? "bg-slate-800 text-white border-slate-800" : "bg-white border-slate-200 hover:border-slate-400",
-                      feedback === "correct" && opt === currentQ.correctAnswer && "bg-green-500 text-white border-green-600",
+                      feedback === "correct" && opt === currentQ.correct_answer && "bg-green-500 text-white border-green-600",
                       feedback === "wrong" && selectedOption === opt && "bg-red-500 text-white border-red-600"
                     )}
                   >
@@ -194,19 +271,19 @@ const QuizPage = () => {
                   onChange={(e) => !feedback && setTextAnswer(e.target.value)}
                   className="text-lg p-6 border-4 border-slate-200 focus-visible:ring-0 focus-visible:border-slate-800 font-bold"
                   disabled={!!feedback}
+                  autoComplete="off"
                 />
                 {feedback && (
                   <div className="mt-4 p-3 bg-blue-50 border-2 border-blue-200 rounded font-bold text-blue-800">
-                    Jawaban: {currentQ.correctAnswer as string}
+                    Jawaban: {currentQ.correct_answer as string}
                   </div>
                 )}
               </div>
             )}
 
-            {/* TIPE 3: REORDER (DRAG & DROP SIMPLIFIED) */}
+            {/* TIPE 3: REORDER */}
             {currentQ.type === "reorder" && (
               <div className="space-y-6">
-                {/* Area Jawaban */}
                 <div className="min-h-[80px] p-4 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl flex flex-wrap gap-2">
                   {reorderList.length === 0 && <span className="text-slate-400 font-medium italic self-center">Klik kata di bawah untuk menyusun...</span>}
                   {reorderList.map((word, idx) => (
@@ -215,7 +292,6 @@ const QuizPage = () => {
                     </button>
                   ))}
                 </div>
-                {/* Bank Kata */}
                 <div className="flex flex-wrap gap-2 justify-center">
                   {wordBank.map((word, idx) => (
                     <button key={`${word}-${idx}`} onClick={() => moveWord(word, "bank")} className="px-3 py-2 bg-slate-100 border-2 border-slate-300 text-slate-600 rounded font-bold hover:bg-slate-200 transition-colors">

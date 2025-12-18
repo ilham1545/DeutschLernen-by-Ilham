@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { a1_exam_questions } from "@/data/exam"; 
+import { Link, useNavigate, useParams } from "react-router-dom"; // Tambah useParams
+import { exams } from "@/data/exam"; // Import object 'exams' yang baru
 import AudioButton from "@/components/AudioButton";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,33 +9,56 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Timer, ArrowRight, ArrowLeft, CheckCircle2, XCircle, RefreshCcw, LogOut, AlertTriangle } from "lucide-react";
+import { Timer, ArrowRight, ArrowLeft, CheckCircle2, XCircle, RefreshCcw, LogOut, AlertTriangle, FileWarning } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner"; 
 
 const ExamSimulationPage = () => {
+  const { examId } = useParams(); // 1. Ambil ID dari URL (A1/A2/B1)
   const navigate = useNavigate();
-  const [currentIdx, setCurrentIdx] = useState(0);
   
-  const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [selfGrade, setSelfGrade] = useState<Record<number, boolean>>({});
-  const [showSample, setShowSample] = useState(false);
+  // 2. Cari soal berdasarkan ID. Default undefined kalau gak ada.
+  const currentExamQuestions = exams[examId as string];
 
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
   const [timeLeft, setTimeLeft] = useState(60 * 60);
   const [isFinished, setIsFinished] = useState(false);
   const [score, setScore] = useState(0);
-
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
-  const question = a1_exam_questions[currentIdx];
-  const totalQuestions = a1_exam_questions.length;
+  // --- EFEK RESET KETIKA UJIAN BERUBAH ---
+  // Ini PENTING biar kalau pindah dari A1 ke B1, jawabannya ke-reset
+  useEffect(() => {
+    setAnswers({});
+    setCurrentIdx(0);
+    setTimeLeft(60 * 60);
+    setIsFinished(false);
+    setScore(0);
+  }, [examId]);
+
+  // --- HANDLE JIKA UJIAN TIDAK DITEMUKAN ---
+  if (!currentExamQuestions) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="text-center max-w-md">
+          <FileWarning className="w-20 h-20 text-slate-300 mx-auto mb-4" />
+          <h1 className="text-3xl font-black mb-2">Ujian Tidak Ditemukan</h1>
+          <p className="text-muted-foreground mb-6">Simulasi ujian untuk level <span className="font-bold text-red-500">{examId}</span> belum tersedia.</p>
+          <Link to="/">
+            <Button size="lg" className="font-bold border-2 border-foreground">Kembali ke Menu</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const question = currentExamQuestions[currentIdx];
+  const totalQuestions = currentExamQuestions.length;
   const answeredCount = Object.keys(answers).length;
   const progressPercentage = (answeredCount / totalQuestions) * 100;
 
-  useEffect(() => {
-    setShowSample(false);
-  }, [currentIdx]);
-
+  // --- TIMER LOGIC ---
   useEffect(() => {
     if (isFinished || timeLeft <= 0) return;
     const timer = setInterval(() => {
@@ -77,6 +100,8 @@ const ExamSimulationPage = () => {
 
   const checkAndFinish = () => {
     const answeredIds = Object.keys(answers).map(Number);
+    // Cek apakah jumlah jawaban sama dengan total soal
+    // Note: Kita pakai filter boolean biar id yg undefined gak masuk
     if (answeredIds.length < totalQuestions) {
       const missingCount = totalQuestions - answeredIds.length;
       toast.error(`Masih ada ${missingCount} soal kosong!`, {
@@ -90,7 +115,7 @@ const ExamSimulationPage = () => {
 
   const finishExam = (force = false) => {
     let calculatedScore = 0;
-    a1_exam_questions.forEach((q) => {
+    currentExamQuestions.forEach((q) => {
       const ans = answers[q.id] || "";
       if (q.type === "multiple-choice" || q.type === "true-false" || q.type === "text-input") {
         if (ans.toLowerCase() === q.correctAnswer?.toLowerCase()) {
@@ -106,7 +131,6 @@ const ExamSimulationPage = () => {
 
   const resetExam = () => {
     setAnswers({});
-    setSelfGrade({});
     setCurrentIdx(0);
     setTimeLeft(60 * 60);
     setIsFinished(false);
@@ -120,7 +144,7 @@ const ExamSimulationPage = () => {
         <Card className="w-full max-w-lg border-4 border-foreground shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
           <CardHeader className="text-center bg-white border-b-4 border-foreground py-8">
             <CardTitle className="text-4xl font-black mb-2">HASIL UJIAN</CardTitle>
-            <p className="text-muted-foreground font-medium">Goethe-Zertifikat A1 (Simulasi)</p>
+            <p className="text-muted-foreground font-medium">Goethe-Zertifikat {examId} (Simulasi)</p>
           </CardHeader>
           <CardContent className="p-8 text-center space-y-6">
             <div className="relative inline-flex items-center justify-center">
@@ -152,45 +176,24 @@ const ExamSimulationPage = () => {
     );
   }
 
-  // --- RENDER HALAMAN UJIAN (HEADER DIPERBAIKI) ---
+  // --- RENDER HALAMAN UJIAN ---
   return (
     <div className="min-h-screen bg-background flex flex-col pb-6 relative">
       
-      {/* HEADER STICKY (DESIGN ASLI + RESPONSIVE FIX) */}
+      {/* HEADER STICKY */}
       <div className="sticky top-0 z-50 bg-foreground text-background py-3 px-4">
         <div className="container mx-auto flex justify-between items-center max-w-3xl">
-          
-          {/* KIRI: Tombol Keluar & Judul */}
           <div className="flex items-center gap-2 sm:gap-4">
-            
-            {/* Tombol Keluar: Icon Only di HP, Teks di Desktop */}
-            <Button 
-              onClick={handleExitClick} 
-              variant="ghost" 
-              size="sm" 
-              className="text-white hover:bg-white/20 hover:text-white px-2 h-9 border border-transparent hover:border-white/50"
-            >
+            <Button onClick={handleExitClick} variant="ghost" size="sm" className="text-white hover:bg-white/20 hover:text-white px-2 h-9 border border-transparent hover:border-white/50">
               <LogOut className="w-5 h-5 sm:mr-2" />
               <span className="font-bold hidden sm:inline">Keluar</span>
             </Button>
-            
-            {/* Pemisah (Hanya di Desktop) */}
             <div className="h-6 w-[1px] bg-white/30 hidden sm:block"></div>
-            
             <div className="flex items-center gap-2">
-              {/* EXAM A1: Selalu Muncul (Text kecil di HP, Besar di Desktop) */}
-              <span className="font-black text-sm sm:text-lg tracking-wider whitespace-nowrap">
-                EXAM A1
-              </span>
-              
-              {/* Badge Section: HÖREN/LESEN */}
-              <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 bg-yellow-400 text-black rounded uppercase shrink-0">
-                {question.section}
-              </span>
+              <span className="font-black text-sm sm:text-lg tracking-wider whitespace-nowrap">EXAM {examId}</span>
+              <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 bg-yellow-400 text-black rounded uppercase shrink-0">{question.section}</span>
             </div>
           </div>
-
-          {/* KANAN: Timer */}
           <div className={cn("flex items-center gap-2 font-mono text-sm sm:text-xl font-bold", timeLeft < 300 ? "text-red-400 animate-pulse" : "text-white")}>
             <Timer className="w-4 h-4 sm:w-5 sm:h-5" /> 
             {formatTime(timeLeft)}
@@ -202,21 +205,18 @@ const ExamSimulationPage = () => {
       <div className="bg-slate-100 border-b-2 border-foreground/10 py-4 overflow-x-auto">
         <div className="container max-w-3xl px-4">
           <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-            {a1_exam_questions.map((q, idx) => {
+            {currentExamQuestions.map((q, idx) => {
               const isAnswered = answers[q.id] !== undefined && answers[q.id] !== "";
               const isCurrent = idx === currentIdx;
-              
               return (
                 <button
                   key={q.id}
                   onClick={() => setCurrentIdx(idx)}
                   className={cn(
                     "w-8 h-8 md:w-10 md:h-10 text-xs md:text-sm font-bold rounded-md border-2 transition-all flex items-center justify-center",
-                    isCurrent 
-                      ? "border-blue-600 bg-blue-100 text-blue-700 ring-2 ring-blue-300 scale-110 z-10" 
-                      : isAnswered 
-                        ? "border-green-600 bg-green-500 text-white" 
-                        : "border-gray-300 bg-white text-gray-400 hover:border-gray-400" 
+                    isCurrent ? "border-blue-600 bg-blue-100 text-blue-700 ring-2 ring-blue-300 scale-110 z-10" 
+                      : isAnswered ? "border-green-600 bg-green-500 text-white" 
+                      : "border-gray-300 bg-white text-gray-400 hover:border-gray-400" 
                   )}
                 >
                   {idx + 1}
@@ -224,19 +224,14 @@ const ExamSimulationPage = () => {
               );
             })}
           </div>
-          <p className="text-[10px] text-center sm:text-left mt-2 text-muted-foreground font-medium uppercase tracking-wider">
-            *Hijau: Terisi • Putih: Kosong • Biru: Aktif
-          </p>
         </div>
       </div>
 
-      {/* Progress Bar (Hapus indicatorClassName biar gak error di tipe data) */}
       <Progress value={progressPercentage} className="h-1 rounded-none bg-blue-100" />
 
       {/* MAIN CONTENT CARD */}
       <div className="flex-1 container mx-auto p-4 max-w-3xl flex flex-col justify-center mt-2">
         <Card className="border-4 border-foreground shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white overflow-hidden flex flex-col min-h-[400px]">
-          
           <CardHeader className="bg-slate-50 border-b-4 border-foreground pb-4">
             <div className="flex justify-between items-start">
               <div>
@@ -319,7 +314,6 @@ const ExamSimulationPage = () => {
         </Card>
       </div>
 
-      {/* --- POPUP KONFIRMASI KELUAR --- */}
       {showExitConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <Card className="w-full max-w-sm border-4 border-foreground shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-white animate-in zoom-in-95 duration-200">
@@ -340,7 +334,6 @@ const ExamSimulationPage = () => {
           </Card>
         </div>
       )}
-
     </div>
   );
 };

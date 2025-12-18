@@ -2,7 +2,6 @@ export type QuestionType = "multiple-choice" | "true-false" | "text-input" | "es
 
 export interface ExamQuestion {
   id: number;
-  // Tambahkan "Sprechen" di sini
   section: "Hören" | "Lesen" | "Schreiben" | "Sprechen";
   part: string;
   type: QuestionType;
@@ -17,8 +16,9 @@ export interface ExamQuestion {
   keywords?: string[]; // Kata kunci untuk AI Checker
 }
 
-export const a1_exam_questions: ExamQuestion[] = [
-  // --- BAGIAN 1: HÖREN (MENDENGAR) ---
+// --- DATA UJIAN LEVEL A1 (LENGKAP) ---
+const a1_questions: ExamQuestion[] = [
+  // HÖREN
   {
     id: 1,
     section: "Hören",
@@ -44,7 +44,7 @@ export const a1_exam_questions: ExamQuestion[] = [
     explanation: "Lisa bilang dia terlambat 20 menit, jadi dia tiba jam 19:30."
   },
   
-  // --- BAGIAN 2: LESEN (MEMBACA) ---
+  // LESEN
   {
     id: 3,
     section: "Lesen",
@@ -70,7 +70,7 @@ export const a1_exam_questions: ExamQuestion[] = [
     explanation: "'Außer Betrieb' artinya rusak/tidak beroperasi."
   },
 
-  // --- BAGIAN 3: SCHREIBEN (MENULIS - ISIAN) ---
+  // SCHREIBEN
   {
     id: 5,
     section: "Schreiben",
@@ -106,7 +106,7 @@ export const a1_exam_questions: ExamQuestion[] = [
     explanation: "Tertulis 'am Samstag' dan '19 Uhr' (jam 7 malam), jadi benar Sabtu malam."
   },
 
-  // --- LESEN TEIL 2 (Iklan Internet - A atau B) ---
+  // LESEN TEIL 2
   {
     id: 8,
     section: "Lesen",
@@ -132,7 +132,7 @@ export const a1_exam_questions: ExamQuestion[] = [
     explanation: "Jebakan! Iklan A di pusat kota tapi mahal. Iklan B murah tapi di pinggiran. Sesuai kriteria 'Murah & Pusat Kota', tidak ada yang cocok."
   },
 
-  // --- LESEN TEIL 3 (Papan Tanda - Richtig/Falsch) ---
+  // LESEN TEIL 3
   {
     id: 10,
     section: "Lesen",
@@ -146,10 +146,7 @@ export const a1_exam_questions: ExamQuestion[] = [
     explanation: "Mittagspause artinya Istirahat Siang (Toko Tutup). Jadi jam 12:30 tidak bisa belanja."
   },
 
-  // ==========================================
-  // SCHREIBEN (MENULIS) - Formulir
-  // ==========================================
-  // --- BAGIAN 3 LANJUTAN: SCHREIBEN (AI KOREKSI) ---
+  // SCHREIBEN EMAIL
   {
     id: 11,
     section: "Schreiben",
@@ -163,7 +160,7 @@ export const a1_exam_questions: ExamQuestion[] = [
     keywords: ["sehr geehrte", "august", "kostet", "hund", "grüßen"] 
   },
 
-  // --- BAGIAN 4: SPRECHEN (AI SPEECH-TO-TEXT) ---
+  // SPRECHEN
   {
     id: 12,
     section: "Sprechen",
@@ -187,3 +184,43 @@ export const a1_exam_questions: ExamQuestion[] = [
     keywords: ["bitte", "wasser", "haben"]
   }
 ];
+
+// --- DATA UJIAN LEVEL A2 (CONTOH) ---
+const a2_questions: ExamQuestion[] = [
+  {
+    id: 1,
+    section: "Lesen",
+    part: "Teil 1",
+    type: "multiple-choice",
+    instruction: "Baca email berikut.",
+    context: "Hallo Tom, ich habe am Samstag Geburtstag. Ich mache eine Party. Kommst du?",
+    question: "Was feiert die Person?",
+    options: ["Hochzeit", "Geburtstag", "Abschied"],
+    correctAnswer: "Geburtstag",
+    explanation: "Jelas tertulis 'Geburtstag' (Ulang Tahun)."
+  }
+];
+
+// --- DATA UJIAN LEVEL B1 (CONTOH) ---
+const b1_questions: ExamQuestion[] = [
+    {
+      id: 1,
+      section: "Lesen",
+      part: "Teil 1",
+      type: "true-false",
+      instruction: "Baca Blog berikut.",
+      context: "Blogpost: Reisen macht Spaß, aber es ist auch sehr teuer. Ich bleibe lieber zu Hause.",
+      question: "Der Autor findet Reisen billig.",
+      options: ["Richtig", "Falsch"],
+      correctAnswer: "Falsch",
+      explanation: "Teuer artinya Mahal, bukan Billig (Murah)."
+    }
+];
+
+// --- EXPORT UTAMA (DICTIONARY) ---
+export const exams: Record<string, ExamQuestion[]> = {
+  "A1": a1_questions,
+  "A2": a2_questions,
+  "B1": b1_questions,
+  "B2": [], // Placeholder kosong
+};
