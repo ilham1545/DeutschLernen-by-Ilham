@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { programs } from "@/data/programs"; 
 import { useProgramProgress } from "@/hooks/useProgramProgress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   CheckCircle2, Briefcase, GraduationCap, HeartHandshake, Plane, 
-  ChevronRight, Info, Banknote, Clock, BookOpen, Filter, Languages, Leaf, ExternalLink, Globe
+  ChevronRight, Info, Banknote, Clock, BookOpen, Languages, Leaf, ExternalLink, Globe
 } from "lucide-react"; 
 import { cn } from "@/lib/utils";
 import { useActivityLog } from "@/hooks/useActivityLog";
@@ -18,7 +18,8 @@ const categories = {
   gastro: "Hospitality & Service",
   craft: "Kerajinan & Konstruksi (Handwerk)",
   logistics: "Logistik & Transport",
-  science: "Sains & Laboratorium"
+  science: "Sains & Laboratorium",
+  social: "Sosial & Lingkungan"
 };
 
 const MeinWegPage = () => {
@@ -32,11 +33,15 @@ const MeinWegPage = () => {
   const { logActivity } = useActivityLog();
 
   // Logika Program Aktif
-  const activeProgramId = mainCategory.startsWith("aus_") ? selectedMajor : mainCategory;
-  const currentProgram = programs[activeProgramId];
+  // Jika mainCategory adalah 'aus_general' (Menu Ausbildung), maka tampilkan program sesuai selectedMajor
+  // Jika tidak (misal Au Pair), tampilkan program sesuai mainCategory
+  const activeProgramId = mainCategory === "aus_general" || mainCategory.startsWith("aus_") ? selectedMajor : mainCategory;
+  
+  // Fallback safe guard jika ID tidak ditemukan
+  const currentProgram = programs[activeProgramId] || programs["aus_general"];
 
   // Hitung Progress
-  const reqIds = currentProgram?.requirements.map(r => r.id) || [];
+  const reqIds = currentProgram?.requirements?.map(r => r.id) || [];
   const progressPercent = getProgress(reqIds);
 
   // Ambil list jurusan Ausbildung untuk dropdown, difilter by category
@@ -100,7 +105,11 @@ const MeinWegPage = () => {
             ].map((menu) => (
               <button
                 key={menu.id}
-                onClick={() => setMainCategory(menu.id)}
+                onClick={() => {
+                    setMainCategory(menu.id);
+                    // Reset pilihan jurusan ke general jika pindah ke menu ausbildung
+                    if (menu.id === "aus_general") setSelectedMajor("aus_general");
+                }}
                 className={cn(
                   "w-full text-left px-4 py-4 rounded-xl font-bold flex items-center justify-between transition-all border-2",
                   mainCategory === menu.id || (menu.id === "aus_general" && mainCategory.startsWith("aus_"))
@@ -188,6 +197,7 @@ const MeinWegPage = () => {
                           currentProgram.category === "health" ? "bg-red-100 text-red-700 border-red-200" :
                           currentProgram.category === "tech" ? "bg-blue-100 text-blue-700 border-blue-200" :
                           currentProgram.category === "business" ? "bg-purple-100 text-purple-700 border-purple-200" :
+                          currentProgram.category === "social" ? "bg-green-100 text-green-700 border-green-200" :
                           "bg-slate-200 text-slate-700 border-slate-300"
                       )}>
                           {currentProgram.category ? categories[currentProgram.category as keyof typeof categories] : "Program Umum"}
@@ -213,15 +223,17 @@ const MeinWegPage = () => {
                       )}
                     </div>
 
-                    {/* Radial Progress Widget */}
-                    <div className="hidden md:flex flex-col items-center justify-center p-6 bg-white rounded-2xl border-4 border-slate-100 shadow-sm min-w-[120px]">
-                        <div className={cn("text-4xl font-black", 
-                             progressPercent === 100 ? "text-green-600" : "text-blue-600"
-                        )}>
-                            {progressPercent}%
+                    {/* Radial Progress Widget (Hanya tampil jika ada requirements) */}
+                    {currentProgram.requirements && currentProgram.requirements.length > 0 && (
+                        <div className="hidden md:flex flex-col items-center justify-center p-6 bg-white rounded-2xl border-4 border-slate-100 shadow-sm min-w-[120px]">
+                            <div className={cn("text-4xl font-black", 
+                                progressPercent === 100 ? "text-green-600" : "text-blue-600"
+                            )}>
+                                {progressPercent}%
+                            </div>
+                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">Kesiapan</div>
                         </div>
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">Kesiapan</div>
-                    </div>
+                    )}
                   </div>
                 </CardHeader>
 
@@ -240,10 +252,8 @@ const MeinWegPage = () => {
                 </CardContent>
               </Card>
 
-              {/* --- CHECKLIST DOKUMEN --- */}
-              {/* 2. AREA DINAMIS: CHECKLIST ATAU WEBSITE LAMARAN */}
-              {currentProgram.requirements.length > 0 ? (
-                  // --- OPSI A: TAMPILKAN CHECKLIST (Normal) ---
+              {/* --- CHECKLIST DOKUMEN (TAMPIL JIKA ADA DATA) --- */}
+              {currentProgram.requirements && currentProgram.requirements.length > 0 && (
                   <Card className="border-4 border-foreground shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white overflow-hidden">
                     <CardHeader className="bg-yellow-400 border-b-4 border-foreground py-4 flex flex-row items-center justify-between">
                       <CardTitle className="text-xl font-black flex items-center gap-2 text-black">
@@ -305,17 +315,19 @@ const MeinWegPage = () => {
                       </div>
                     </CardContent>
                   </Card>
-              ) : (
-                  // --- OPSI B: TAMPILKAN LINK WEBSITE (Khusus Info Umum) ---
+              )}
+              
+              {/* --- WEBSITE LINK (TAMPIL JIKA ADA DATA) --- */}
+              {currentProgram.usefulLinks && currentProgram.usefulLinks.length > 0 && (
                   <Card className="border-4 border-foreground shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white overflow-hidden">
                     <CardHeader className="bg-blue-600 text-white border-b-4 border-foreground py-6">
                       <CardTitle className="text-xl font-black flex items-center gap-2">
-                        <Globe className="w-6 h-6"/> Website Resmi Lamaran
+                        <Globe className="w-6 h-6"/> Website Resmi & Lowongan
                       </CardTitle>
-                      <p className="text-blue-100 text-sm mt-1">Gunakan website di bawah ini untuk mencari lowongan dan info detail.</p>
+                      <p className="text-blue-100 text-sm mt-1">Gunakan link di bawah untuk mencari info valid atau melamar langsung.</p>
                     </CardHeader>
                     <CardContent className="p-0 divide-y divide-slate-100">
-                        {currentProgram.usefulLinks?.map((link, idx) => (
+                        {currentProgram.usefulLinks.map((link, idx) => (
                             <a 
                                 key={idx} 
                                 href={link.url} 
