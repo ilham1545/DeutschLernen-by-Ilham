@@ -101,3 +101,27 @@ src/
 ├── utils/           # Fungsi utilitas bantu (grammarGenerator, progress calc)
 ├── App.tsx          # Komponen utama & konfigurasi Router
 └── main.tsx         # Entry point aplikasi
+
+## 🌟 Keunggulan
+
+* **Performance:** Sangat cepat berkat penggunaan Vite dan Bun.
+* **Type Safety:** Ditulis sepenuhnya dengan TypeScript untuk meminimalisir *runtime errors*.
+* **User Experience:** Menggunakan komponen UI yang konsisten, aksesibel, dan responsif.
+* **Scalability:** Struktur kode yang modular memudahkan penambahan fitur baru seperti bahasa tambahan atau gamifikasi lebih lanjut.
+
+## 🤝 Kontribusi
+
+Kontribusi sangat diterima! Jika Anda ingin meningkatkan aplikasi ini:
+
+1. Fork repository ini.
+2. Buat branch fitur baru (`git checkout -b fitur-keren`).
+3. Commit perubahan Anda (`git commit -m 'Menambahkan fitur keren'`).
+4. Push ke branch tersebut (`git push origin fitur-keren`).
+5. Buat Pull Request.
+
+## 📄 Lisensi
+
+Proyek ini dilisensikan di bawah **MIT License**. Lihat file [LICENSE](LICENSE) untuk detail lebih lanjut.
+
+---
+Dibuat dengan ❤️ untuk pembelajar Bahasa Jerman.
