@@ -101,6 +101,7 @@ src/
 ├── utils/           # Fungsi utilitas bantu (grammarGenerator, progress calc)
 ├── App.tsx          # Komponen utama & konfigurasi Router
 └── main.tsx         # Entry point aplikasi
+```
 
 ## 🌟 Keunggulan
 
