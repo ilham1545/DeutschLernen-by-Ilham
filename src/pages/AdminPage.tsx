@@ -7,13 +7,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+// UPDATE IMPORT DI SINI: Tambah DialogDescription
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { 
   Loader2, UploadCloud, FileJson, LogOut, Plus, Trash2, Edit2, 
   Layers, BookOpen, Crown, BookText, FileCode, LayoutDashboard, Database,
   Menu, X, Home, ArrowLeft, UserCircle, HelpCircle, Save, AlignLeft, List, Grid3X3, Image as ImageIcon, GraduationCap,
-  ArrowUp, ArrowDown, Link as LinkIcon, Info
+  ArrowUp, ArrowDown, Link as LinkIcon, RotateCcw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -29,6 +30,19 @@ type QuizQuestionDB = { id: string; quiz_id: string; question: string; type: str
 type ProgramDB = {
   id: string; title: string; category: string; description: string; 
   salary: string; duration: string; source: string; what_you_learn: string[];
+};
+
+// Default Categories
+const defaultCategoryLabels: Record<string, string> = {
+  general: "Program Umum",
+  health: "Kesehatan (Gesundheit)",
+  tech: "Teknik & IT",
+  business: "Bisnis & Admin",
+  gastro: "Hotel & Restoran",
+  craft: "Handwerk & Konstruksi",
+  logistics: "Logistik & Transport",
+  science: "Sains & Lab",
+  social: "Sosial & Lingkungan"
 };
 
 const AdminPage = () => {
@@ -51,6 +65,8 @@ const AdminPage = () => {
   const [quizzes, setQuizzes] = useState<QuizHeader[]>([]);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDB[]>([]);
   const [programs, setPrograms] = useState<ProgramDB[]>([]);
+  
+  const [categoryList, setCategoryList] = useState<string[]>(Object.keys(defaultCategoryLabels));
   
   // --- STATS ---
   const [stats, setStats] = useState({ levels: 0, lessons: 0, vocabs: 0, materials: 0, questions: 0, programs: 0 });
@@ -85,26 +101,26 @@ const AdminPage = () => {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [formType, setFormType] = useState<"level" | "lesson" | "vocab">("vocab");
   
-  // --- FORM INPUTS (VOCAB/LESSON) ---
+  // --- FORM INPUTS ---
   const [formData, setFormData] = useState({
     id: "", title: "", description: "", slug: "", order_index: 0,
     german: "", indonesian: "", example: ""
   });
 
-  // --- FORM INPUTS (MATERIAL - VISUAL EDITOR) ---
   const [materialForm, setMaterialForm] = useState({
     id: "", title: "", section_id: "", level_id: "A1", order_index: 0,
     content: [] as any[],
     resources: [] as { title: string, url: string }[] 
   });
 
-  // --- FORM INPUTS (PROGRAM - VISUAL EDITOR) ---
   const [programForm, setProgramForm] = useState({
     id: "", title: "", category: "general", description: "", salary: "", duration: "", source: "",
     what_you_learn: [] as string[],
     requirements: [] as { req_id: string, label: string, note: string }[],
     links: [] as { label: string, url: string, description: string }[]
   });
+  
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
 
   // --- HELPER FUNCTIONS ---
   const resetForm = () => {
@@ -182,7 +198,17 @@ const AdminPage = () => {
 
   const fetchLevels = async () => { const { data } = await supabase.from("levels").select("*").order("id"); if (data) setLevels(data); };
   const fetchQuizzes = async () => { const { data } = await supabase.from("quizzes").select("*").order("level"); if (data) setQuizzes(data); };
-  const fetchPrograms = async () => { const { data } = await supabase.from("programs").select("*").order("id"); if (data) setPrograms(data); };
+  
+  const fetchPrograms = async () => {
+      const { data } = await supabase.from("programs").select("*").order("id");
+      if (data) {
+          setPrograms(data);
+          const dbCategories = Array.from(new Set(data.map(p => p.category))).filter(Boolean);
+          const defaultKeys = Object.keys(defaultCategoryLabels);
+          const combinedCats = Array.from(new Set([...defaultKeys, ...dbCategories]));
+          setCategoryList(combinedCats);
+      }
+  };
 
   const fetchLessons = async (levelId: string) => { setIsLoadingData(true); const { data } = await supabase.from("lessons").select("*").eq("level_id", levelId).order("order_index"); if (data) setLessons(data); setIsLoadingData(false); };
   const fetchVocabs = async (lessonId: string) => { setIsLoadingData(true); const { data } = await supabase.from("vocabularies").select("*").eq("lesson_id", lessonId).order("german"); if (data) setVocabs(data); setIsLoadingData(false); };
@@ -399,14 +425,16 @@ const AdminPage = () => {
   };
 
   const getPlaceholder = () => {
+      // ... (code for getPlaceholder remains the same - abbreviated for brevity)
       if (importType === "vocab") return `{\n  "level_id": "A1",\n  "title": "Judul Bab",\n  "slug": "judul_bab_unik",\n  "vocabulary": [\n    { "german": "Apfel", "indonesian": "Apel", "example": "Ich esse..." }\n  ]\n}`;
       if (importType === "program") return `{\n  "id": "contoh_id",\n  "title": "Nama Program",\n  "category": "health",\n  "description": "Deskripsi...",\n  "salary": "€1000",\n  "duration": "3 Tahun",\n  "whatYouLearn": ["Skill A", "Skill B"],\n  "requirements": [{ "id": "req1", "label": "Syarat A" }],\n  "usefulLinks": [{ "label": "Link A", "url": "..." }]\n}`;
       if (importType === "quiz") return `{\n  "level": "A2",\n  "title": "Evaluasi Level A2",\n  "questions": [\n    {\n      "type": "multiple-choice",\n      "question": "Was ist das?",\n      "options": ["Hund", "Katze", "Maus"],\n      "correct_answer": "Hund",\n      "explanation": "Penjelasan..."\n    }\n  ]\n}`;
-      return `{\n  "level_id": "A1",\n  "section_id": "unik_id_materi",\n  "title": "Judul Materi",\n  "order_index": 1,\n  "content": [\n    { "type": "text", "content": "Halo dunia.\\nIni baris baru (pakai slash-n)." },\n    { "type": "table", "headers": ["A", "B"], "rows": [["1", "2"]] },\n    { "type": "image", "src": "https://placehold.co/600x400", "alt": "Deskripsi gambar" }\n  ],\n  "resources": [\n    { "title": "Sumber Referensi", "url": "https://google.com" }\n  ]\n}`;
+      return `{\n  "level_id": "A1",\n  "section_id": "unik_id_materi",\n  "title": "Judul Materi",\n  "order_index": 1,\n  "content": [\n    { "type": "text", "content": "Halo dunia.\\nIni contoh paragraf baru."\n    },\n    {\n      "type": "list",\n      "items": ["Poin 1", "Poin 2"]\n    },\n    {\n      "type": "table",\n      "headers": ["A", "B"],\n      "rows": [["1", "2"]]\n    },\n    {\n      "type": "image",\n      "src": "https://placehold.co/600x400",\n      "alt": "Contoh Gambar"\n    }\n  ],\n  "resources": [\n    { "title": "Link Sumber", "url": "https://google.com" }\n  ]\n}`;
   };
 
   const openProgramDialog = async (item: any | null) => {
       setEditingItem(item);
+      setIsCustomCategory(false);
       if (item) {
           const { data: reqs } = await supabase.from('program_requirements').select('*').eq('program_id', item.id);
           const { data: links } = await supabase.from('program_links').select('*').eq('program_id', item.id);
@@ -463,7 +491,7 @@ const AdminPage = () => {
               <button onClick={() => {setActiveMenu("vocab"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "vocab" ? "bg-blue-50 text-blue-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><Database className="w-4 h-4"/> Database Kosakata</button>
               <button onClick={() => {setActiveMenu("material"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "material" ? "bg-green-50 text-green-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><BookText className="w-4 h-4"/> Materi Bacaan</button>
               <button onClick={() => {setActiveMenu("quiz"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "quiz" ? "bg-yellow-50 text-yellow-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><HelpCircle className="w-4 h-4"/> Quiz Editor</button>
-              <button onClick={() => {setActiveMenu("program"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "program" ? "bg-orange-50 text-orange-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><GraduationCap className="w-4 h-4"/> Program ke Jerman</button>
+              <button onClick={() => {setActiveMenu("program"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "program" ? "bg-orange-50 text-orange-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><GraduationCap className="w-4 h-4"/> Program Studi</button>
               <div className="my-6 border-t border-slate-100"></div>
               <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">System</p>
               <button onClick={() => {setActiveMenu("import"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "import" ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><FileJson className="w-4 h-4"/> Import JSON</button>
@@ -487,7 +515,7 @@ const AdminPage = () => {
                   {activeMenu === "dashboard" && (
                       <div className="space-y-8 animate-in fade-in duration-500">
                           <div className="flex flex-col gap-1"><h1 className="text-3xl font-bold text-slate-900">Selamat Datang, {fullName.split(" ")[0]}.</h1><p className="text-slate-500">Ringkasan statistik konten pembelajaran.</p></div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ label: "Level Aktif", val: stats.levels, icon: Crown, color: "text-blue-600", bg: "bg-blue-50" }, { label: "Total Bab", val: stats.lessons, icon: Layers, color: "text-green-600", bg: "bg-green-50" }, { label: "Kosakata", val: stats.vocabs, icon: BookOpen, color: "text-yellow-600", bg: "bg-yellow-50" }, { label: "Program ke Jerman", val: stats.programs, icon: GraduationCap, color: "text-orange-600", bg: "bg-orange-50" },].map((item, i) => (<Card key={i} className="border-0 shadow-sm hover:shadow-md transition-shadow"><CardContent className="p-6 flex items-center gap-4"><div className={cn("p-3 rounded-xl", item.bg, item.color)}><item.icon className="w-6 h-6"/></div><div><p className="text-2xl font-bold text-slate-900">{item.val}</p><p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{item.label}</p></div></CardContent></Card>))}</div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ label: "Level Aktif", val: stats.levels, icon: Crown, color: "text-blue-600", bg: "bg-blue-50" }, { label: "Total Bab", val: stats.lessons, icon: Layers, color: "text-green-600", bg: "bg-green-50" }, { label: "Kosakata", val: stats.vocabs, icon: BookOpen, color: "text-yellow-600", bg: "bg-yellow-50" }, { label: "Program Studi", val: stats.programs, icon: GraduationCap, color: "text-orange-600", bg: "bg-orange-50" },].map((item, i) => (<Card key={i} className="border-0 shadow-sm hover:shadow-md transition-shadow"><CardContent className="p-6 flex items-center gap-4"><div className={cn("p-3 rounded-xl", item.bg, item.color)}><item.icon className="w-6 h-6"/></div><div><p className="text-2xl font-bold text-slate-900">{item.val}</p><p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{item.label}</p></div></CardContent></Card>))}</div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><Card className="border-0 shadow-sm bg-gradient-to-br from-slate-900 to-slate-800 text-white"><CardContent className="p-8"><div className="mb-6"><h3 className="text-xl font-bold mb-2">Ingin menambah data massal?</h3><p className="text-slate-400 text-sm">Gunakan fitur import JSON untuk mempercepat proses input materi dan kosakata.</p></div><Button onClick={() => setActiveMenu("import")} className="bg-white text-black hover:bg-slate-200 font-bold border-0">Mulai Import JSON</Button></CardContent></Card></div>
                       </div>
                   )}
@@ -537,7 +565,7 @@ const AdminPage = () => {
                   {activeMenu === "program" && (
                     <div className="space-y-6 animate-in fade-in duration-300">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <h2 className="text-2xl font-bold text-slate-900">Program ke Jerman</h2>
+                            <h2 className="text-2xl font-bold text-slate-900">Program Studi</h2>
                             <div className="flex gap-2 bg-white p-1 rounded-lg border shadow-sm">
                                 <button onClick={() => setProgramFilter("all")} className={cn("px-4 py-1.5 rounded-md text-sm font-bold transition-all", programFilter === "all" ? "bg-orange-600 text-white shadow" : "text-slate-500 hover:bg-slate-50")}>Semua</button>
                                 <button onClick={() => setProgramFilter("general")} className={cn("px-4 py-1.5 rounded-md text-sm font-bold transition-all", programFilter === "general" ? "bg-orange-600 text-white shadow" : "text-slate-500 hover:bg-slate-50")}>Program Umum</button>
@@ -651,7 +679,7 @@ const AdminPage = () => {
                       <div className="space-y-6 animate-in fade-in duration-300">
                           <h2 className="text-2xl font-bold text-slate-900">Import JSON</h2>
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                              <Card className="lg:col-span-1 border-0 shadow-sm h-fit"><CardContent className="p-6 space-y-4"><div className="space-y-2"><Label className="text-xs font-bold uppercase text-slate-500">Tipe Data</Label><Select value={importType} onValueChange={(val: any) => setImportType(val)}><SelectTrigger className="font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="vocab">KOSAKATA</SelectItem><SelectItem value="material">MATERI</SelectItem><SelectItem value="quiz">QUIZ / SOAL</SelectItem><SelectItem value="program">PROGRAM KE JERMAN</SelectItem></SelectContent></Select></div><div className="bg-slate-50 p-4 rounded-lg border text-xs font-mono text-slate-600 overflow-auto max-h-[400px]"><p className="font-bold mb-2 text-slate-400">Template:</p><pre className="whitespace-pre-wrap break-words">{getPlaceholder()}</pre></div></CardContent></Card>
+                              <Card className="lg:col-span-1 border-0 shadow-sm h-fit"><CardContent className="p-6 space-y-4"><div className="space-y-2"><Label className="text-xs font-bold uppercase text-slate-500">Tipe Data</Label><Select value={importType} onValueChange={(val: any) => setImportType(val)}><SelectTrigger className="font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="vocab">KOSAKATA</SelectItem><SelectItem value="material">MATERI</SelectItem><SelectItem value="quiz">QUIZ / SOAL</SelectItem><SelectItem value="program">PROGRAM STUDI</SelectItem></SelectContent></Select></div><div className="bg-slate-50 p-4 rounded-lg border text-xs font-mono text-slate-600 overflow-auto max-h-[400px]"><p className="font-bold mb-2 text-slate-400">Template:</p><pre className="whitespace-pre-wrap break-words">{getPlaceholder()}</pre></div></CardContent></Card>
                               <Card className="lg:col-span-2 border-0 shadow-sm flex flex-col"><CardHeader className="border-b bg-slate-50/50"><CardTitle className="text-base font-bold flex items-center gap-2"><FileCode className="w-4 h-4"/> Editor</CardTitle></CardHeader><CardContent className="p-0 flex-1 flex flex-col"><Textarea className="flex-1 min-h-[400px] border-0 rounded-none p-6 font-mono text-xs focus-visible:ring-0 bg-white" placeholder="// Paste JSON di sini..." value={jsonInput} onChange={(e) => setJsonInput(e.target.value)} spellCheck={false} /><div className="p-4 border-t bg-slate-50 flex justify-end"><Button onClick={handleSmartImport} disabled={isUploading || !jsonInput} className="font-bold bg-black text-white hover:bg-slate-800">{isUploading ? <Loader2 className="animate-spin w-4 h-4 mr-2"/> : <UploadCloud className="w-4 h-4 mr-2"/>} Proses Import</Button></div></CardContent></Card>
                           </div>
                       </div>
@@ -661,12 +689,32 @@ const AdminPage = () => {
       </main>
 
       {/* --- DIALOG EDIT FORM (VOCAB/LESSON) --- */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}><DialogContent className="max-w-[90vw] w-full sm:max-w-md rounded-2xl border-0 shadow-xl overflow-hidden max-h-[85vh] flex flex-col"><DialogHeader className="px-6 py-4 border-b"><DialogTitle>{editingItem ? "Edit Data" : "Tambah Baru"}</DialogTitle></DialogHeader><div className="grid gap-4 py-4 px-6 overflow-y-auto">{formType === "vocab" ? (<><div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Jerman</Label><Input value={formData.german} onChange={e => setFormData({...formData, german: e.target.value})} className="font-bold"/></div><div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Indonesia</Label><Input value={formData.indonesian} onChange={e => setFormData({...formData, indonesian: e.target.value})} className="font-bold"/></div><div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Contoh</Label><Textarea value={formData.example} onChange={e => setFormData({...formData, example: e.target.value})} /></div></>) : (<><div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Judul Bab</Label><Input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="font-bold"/></div><div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Slug</Label><Input value={formData.slug} onChange={e => setFormData({...formData, slug: e.target.value})} className="font-mono text-sm"/></div><div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Urutan</Label><Input type="number" value={formData.order_index} onChange={e => setFormData({...formData, order_index: parseInt(e.target.value)})} /></div></>)}</div><DialogFooter className="px-6 py-4 border-t bg-white flex flex-col-reverse sm:flex-row gap-2"><Button variant="outline" onClick={() => setDialogOpen(false)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleSave} disabled={isUploading} className="w-full sm:w-auto">Simpan</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-[90vw] w-full sm:max-w-md rounded-2xl border-0 shadow-xl overflow-hidden max-h-[85vh] flex flex-col">
+            <DialogHeader className="px-6 py-4 border-b shrink-0"><DialogTitle>{editingItem ? "Edit Data" : "Tambah Baru"}</DialogTitle><DialogDescription className="hidden">Form Data</DialogDescription></DialogHeader>
+            <div className="grid gap-4 py-4 px-6 overflow-y-auto">
+                {formType === "vocab" ? (
+                    <>
+                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Kata Jerman</Label><Input value={formData.german} onChange={e => setFormData({...formData, german: e.target.value})} className="font-bold" placeholder="Contoh: der Apfel"/></div>
+                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Arti Indonesia</Label><Input value={formData.indonesian} onChange={e => setFormData({...formData, indonesian: e.target.value})} className="font-bold" placeholder="Contoh: Apel"/></div>
+                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Contoh Kalimat</Label><Textarea value={formData.example} onChange={e => setFormData({...formData, example: e.target.value})} placeholder="Contoh: Ich esse einen Apfel."/></div>
+                    </>
+                ) : (
+                    <>
+                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Judul Bab</Label><Input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="font-bold" placeholder="Contoh: Perkenalan Diri"/></div>
+                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Slug (ID Unik)</Label><Input value={formData.slug} onChange={e => setFormData({...formData, slug: e.target.value})} className="font-mono text-sm" placeholder="a1-perkenalan"/></div>
+                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Urutan (Angka)</Label><Input type="number" value={formData.order_index} onChange={e => setFormData({...formData, order_index: parseInt(e.target.value)})} placeholder="1"/></div>
+                    </>
+                )}
+            </div>
+            <DialogFooter className="px-6 py-4 border-t bg-white flex flex-col-reverse sm:flex-row gap-2 shrink-0"><Button variant="outline" onClick={() => setDialogOpen(false)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleSave} disabled={isUploading} className="w-full sm:w-auto">Simpan</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* --- DIALOG MATERI EDITOR (VISUAL BLOCK) --- */}
       <Dialog open={materialDialogOpen} onOpenChange={setMaterialDialogOpen}>
           <DialogContent className="max-w-[95vw] w-full h-auto max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-0 shadow-2xl bg-white my-4">
-              <DialogHeader className="px-6 py-4 border-b flex flex-row items-center justify-between bg-slate-50/50 shrink-0"><DialogTitle className="flex items-center gap-2"><BookText className="w-5 h-5 text-green-600"/> Materi Editor (Visual)</DialogTitle></DialogHeader>
+              <DialogHeader className="px-6 py-4 border-b flex flex-row items-center justify-between bg-slate-50/50 shrink-0"><DialogTitle className="flex items-center gap-2"><BookText className="w-5 h-5 text-green-600"/> Materi Editor (Visual)</DialogTitle><DialogDescription className="hidden">Editor visual</DialogDescription></DialogHeader>
               <div className="flex-1 flex flex-col md:flex-row overflow-y-auto">
                   <div className="w-full md:w-80 bg-white p-6 border-b md:border-b-0 md:border-r space-y-4 shrink-0">
                       <div className="space-y-1"><Label className="text-xs font-bold">Judul Materi</Label><Input value={materialForm.title} onChange={e => setMaterialForm({...materialForm, title: e.target.value})} className="font-bold" placeholder="Contoh: Pengenalan Alfabet"/></div>
@@ -717,11 +765,30 @@ const AdminPage = () => {
       {/* --- DIALOG PROGRAM EDITOR (MANUAL) --- */}
       <Dialog open={programDialogOpen} onOpenChange={setProgramDialogOpen}>
           <DialogContent className="max-w-[95vw] w-full h-auto max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-0 shadow-2xl bg-white my-4">
-              <DialogHeader className="px-6 py-4 border-b bg-slate-50/50 shrink-0"><DialogTitle className="flex items-center gap-2"><GraduationCap className="w-5 h-5 text-orange-600"/> Program Editor</DialogTitle></DialogHeader>
+              <DialogHeader className="px-6 py-4 border-b bg-slate-50/50 shrink-0"><DialogTitle className="flex items-center gap-2"><GraduationCap className="w-5 h-5 text-orange-600"/> Program Editor</DialogTitle><DialogDescription className="hidden">Editor Program</DialogDescription></DialogHeader>
               <div className="flex-1 p-6 overflow-y-auto space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <div className="space-y-1"><Label>ID Program (Unik)</Label><Input value={programForm.id} onChange={e => setProgramForm({...programForm, id: e.target.value})} placeholder="aupair, aus_it, dll" className="font-mono text-xs"/></div>
-                   <div className="space-y-1"><Label>Kategori</Label><Select value={programForm.category} onValueChange={(val) => setProgramForm({...programForm, category: val})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="general">Program Umum</SelectItem><SelectItem value="health">Kesehatan</SelectItem><SelectItem value="tech">Teknik & IT</SelectItem><SelectItem value="business">Bisnis</SelectItem><SelectItem value="gastro">Hotel & Resto</SelectItem><SelectItem value="craft">Handwerk</SelectItem><SelectItem value="logistics">Logistik</SelectItem><SelectItem value="science">Sains</SelectItem><SelectItem value="social">Sosial</SelectItem></SelectContent></Select></div>
+                   <div className="space-y-1">
+                      <Label>Kategori</Label>
+                      {isCustomCategory ? (
+                        <div className="flex gap-2">
+                           <Input placeholder="Nama Kategori Baru" value={programForm.category} onChange={e => setProgramForm({...programForm, category: e.target.value})} className="font-bold text-orange-600" />
+                           <Button variant="ghost" size="icon" onClick={() => setIsCustomCategory(false)}><RotateCcw className="w-4 h-4 text-slate-400"/></Button>
+                        </div>
+                      ) : (
+                        <Select value={categoryList.includes(programForm.category) ? programForm.category : "custom"} onValueChange={(val) => {
+                          if(val === "custom") { setIsCustomCategory(true); setProgramForm({...programForm, category: ""}); }
+                          else { setProgramForm({...programForm, category: val}); }
+                        }}>
+                          <SelectTrigger><SelectValue placeholder="Pilih Kategori..." /></SelectTrigger>
+                          <SelectContent>
+                             {categoryList.map(cat => <SelectItem key={cat} value={cat}>{defaultCategoryLabels[cat] || cat}</SelectItem>)}
+                             <SelectItem value="custom" className="text-orange-600 font-bold border-t mt-1 pt-1">+ Tambah Kategori Baru</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                   </div>
                    <div className="space-y-1 md:col-span-2"><Label>Judul Program</Label><Input value={programForm.title} onChange={e => setProgramForm({...programForm, title: e.target.value})} className="font-bold text-lg" placeholder="Nama Program"/></div>
                    <div className="space-y-1 md:col-span-2"><Label>Deskripsi</Label><Textarea value={programForm.description} onChange={e => setProgramForm({...programForm, description: e.target.value})} className="h-20" placeholder="Jelaskan detail program..."/></div>
                    <div className="space-y-1"><Label>Gaji</Label><Input value={programForm.salary} onChange={e => setProgramForm({...programForm, salary: e.target.value})} placeholder="€1000/bulan"/></div>
