@@ -7,14 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-// UPDATE IMPORT DI SINI: Tambah DialogDescription
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { 
   Loader2, UploadCloud, FileJson, LogOut, Plus, Trash2, Edit2, 
   Layers, BookOpen, Crown, BookText, FileCode, LayoutDashboard, Database,
   Menu, X, Home, ArrowLeft, UserCircle, HelpCircle, Save, AlignLeft, List, Grid3X3, Image as ImageIcon, GraduationCap,
-  ArrowUp, ArrowDown, Link as LinkIcon, RotateCcw
+  ArrowUp, ArrowDown, Link as LinkIcon, RotateCcw, Search, AlertTriangle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -71,11 +70,12 @@ const AdminPage = () => {
   // --- STATS ---
   const [stats, setStats] = useState({ levels: 0, lessons: 0, vocabs: 0, materials: 0, questions: 0, programs: 0 });
 
-  // --- SELECTION STATE ---
+  // --- SELECTION & FILTER STATE ---
   const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [programFilter, setProgramFilter] = useState<"all" | "general" | "ausbildung">("all");
-  
+  const [vocabSearchTerm, setVocabSearchTerm] = useState(""); // NEW: Search Vocab
+
   // --- QUIZ EDITOR STATE ---
   const [selectedQuizId, setSelectedQuizId] = useState<string>("");
   const [editingQuestion, setEditingQuestion] = useState<QuizQuestionDB | null>(null);
@@ -94,11 +94,15 @@ const AdminPage = () => {
   // --- UI STATE ---
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  
+  // Dialogs
   const [dialogOpen, setDialogOpen] = useState(false); 
   const [materialDialogOpen, setMaterialDialogOpen] = useState(false); 
   const [programDialogOpen, setProgramDialogOpen] = useState(false); 
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false); // NEW: Custom Delete Dialog
   
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [itemToDelete, setItemToDelete] = useState<{id: string, type: string} | null>(null); // NEW: Track item to delete
   const [formType, setFormType] = useState<"level" | "lesson" | "vocab">("vocab");
   
   // --- FORM INPUTS ---
@@ -110,7 +114,7 @@ const AdminPage = () => {
   const [materialForm, setMaterialForm] = useState({
     id: "", title: "", section_id: "", level_id: "A1", order_index: 0,
     content: [] as any[],
-    resources: [] as { title: string, url: string }[] 
+    resources: [] as { title: string, url: string, type: string }[] 
   });
 
   const [programForm, setProgramForm] = useState({
@@ -223,7 +227,7 @@ const AdminPage = () => {
 
   useEffect(() => {
     if (selectedLevelId) {
-        if (activeMenu === "vocab") { fetchLessons(selectedLevelId); setSelectedLessonId(null); setVocabs([]); } 
+        if (activeMenu === "vocab") { fetchLessons(selectedLevelId); setSelectedLessonId(null); setVocabs([]); setVocabSearchTerm(""); } 
         else if (activeMenu === "material") { fetchMaterials(selectedLevelId); }
     }
   }, [selectedLevelId, activeMenu]);
@@ -254,6 +258,25 @@ const AdminPage = () => {
           if (update2.error) throw update2.error;
           await fetchMaterials(selectedLevelId!);
           toast({ title: "Urutan Berhasil Diubah! 🔄" });
+      } catch (err: any) { toast({ variant: "destructive", title: "Gagal Reorder", description: err.message }); } finally { setIsLoadingData(false); }
+  };
+
+  // NEW: REORDER QUIZ QUESTIONS
+  const handleMoveQuizQuestion = async (item: QuizQuestionDB, direction: 'up' | 'down') => {
+      const currentIndex = quizQuestions.findIndex(q => q.id === item.id);
+      if (currentIndex === -1) return;
+      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+      if (targetIndex < 0 || targetIndex >= quizQuestions.length) return;
+      const neighborItem = quizQuestions[targetIndex];
+
+      setIsLoadingData(true);
+      try {
+          const update1 = await supabase.from('quiz_questions').update({ order_index: neighborItem.order_index }).eq('id', item.id);
+          if (update1.error) throw update1.error;
+          const update2 = await supabase.from('quiz_questions').update({ order_index: item.order_index }).eq('id', neighborItem.id);
+          if (update2.error) throw update2.error;
+          await fetchQuizQuestions(selectedQuizId); // Refetch specific quiz
+          toast({ title: "Urutan Soal Diubah! 🔄" });
       } catch (err: any) { toast({ variant: "destructive", title: "Gagal Reorder", description: err.message }); } finally { setIsLoadingData(false); }
   };
 
@@ -366,16 +389,30 @@ const AdminPage = () => {
     } catch (err: any) { toast({ variant: "destructive", title: "Gagal Simpan", description: err.message }); } finally { setIsUploading(false); }
   };
 
-  const handleDelete = async (id: string, type: "vocab" | "lesson" | "material" | "program" | "quiz_question") => {
-    if (!confirm("Yakin hapus? Data tidak bisa dikembalikan.")) return;
+  // --- DELETE LOGIC (NEW: PREPARE DIALOG) ---
+  const confirmDelete = (item: any, type: string) => {
+      setItemToDelete({ id: item.id, type });
+      setDeleteDialogOpen(true);
+  }
+
+  const performDelete = async () => {
+    if (!itemToDelete) return;
+    const { id, type } = itemToDelete;
+    
+    setIsUploading(true);
     try {
         if (type === "vocab") { await supabase.from("vocabularies").delete().eq("id", id); if (selectedLessonId) fetchVocabs(selectedLessonId); }
         else if (type === "lesson") { await supabase.from("lessons").delete().eq("id", id); if (selectedLevelId) fetchLessons(selectedLevelId); }
         else if (type === "material") { await supabase.from("course_materials").delete().eq("id", id); if (selectedLevelId) fetchMaterials(selectedLevelId); }
         else if (type === "program") { await supabase.from("programs").delete().eq("id", id); fetchPrograms(); }
         else if (type === "quiz_question") { await supabase.from("quiz_questions").delete().eq("id", id); fetchQuizQuestions(selectedQuizId); }
-        toast({ title: "Terhapus", description: "Data sudah hilang." }); fetchStats();
-    } catch (err) { console.error(err); }
+        toast({ title: "Terhapus", description: "Data berhasil dihapus dari database." }); 
+        fetchStats();
+    } catch (err) { console.error(err); } finally {
+        setIsUploading(false);
+        setDeleteDialogOpen(false);
+        setItemToDelete(null);
+    }
   };
 
   const handleSmartImport = async () => {
@@ -462,7 +499,7 @@ const AdminPage = () => {
           setMaterialForm({
               id: item.id, title: item.title, section_id: item.section_id, level_id: item.level_id, order_index: item.order_index,
               content: Array.isArray(parsedContent) ? parsedContent : [],
-              resources: item.resources || []
+              resources: item.resources ? item.resources.map((r: any) => ({...r, type: r.type || 'web'})) : []
           });
       } else {
           setMaterialForm({ id: "", title: "", section_id: "", level_id: selectedLevelId || "A1", order_index: 0, content: [{ type: "text", content: "" }], resources: [] });
@@ -491,7 +528,7 @@ const AdminPage = () => {
               <button onClick={() => {setActiveMenu("vocab"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "vocab" ? "bg-blue-50 text-blue-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><Database className="w-4 h-4"/> Database Kosakata</button>
               <button onClick={() => {setActiveMenu("material"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "material" ? "bg-green-50 text-green-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><BookText className="w-4 h-4"/> Materi Bacaan</button>
               <button onClick={() => {setActiveMenu("quiz"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "quiz" ? "bg-yellow-50 text-yellow-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><HelpCircle className="w-4 h-4"/> Quiz Editor</button>
-              <button onClick={() => {setActiveMenu("program"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "program" ? "bg-orange-50 text-orange-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><GraduationCap className="w-4 h-4"/> Program Studi</button>
+              <button onClick={() => {setActiveMenu("program"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "program" ? "bg-orange-50 text-orange-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><GraduationCap className="w-4 h-4"/> Program ke Jerman</button>
               <div className="my-6 border-t border-slate-100"></div>
               <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">System</p>
               <button onClick={() => {setActiveMenu("import"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "import" ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><FileJson className="w-4 h-4"/> Import JSON</button>
@@ -515,7 +552,7 @@ const AdminPage = () => {
                   {activeMenu === "dashboard" && (
                       <div className="space-y-8 animate-in fade-in duration-500">
                           <div className="flex flex-col gap-1"><h1 className="text-3xl font-bold text-slate-900">Selamat Datang, {fullName.split(" ")[0]}.</h1><p className="text-slate-500">Ringkasan statistik konten pembelajaran.</p></div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ label: "Level Aktif", val: stats.levels, icon: Crown, color: "text-blue-600", bg: "bg-blue-50" }, { label: "Total Bab", val: stats.lessons, icon: Layers, color: "text-green-600", bg: "bg-green-50" }, { label: "Kosakata", val: stats.vocabs, icon: BookOpen, color: "text-yellow-600", bg: "bg-yellow-50" }, { label: "Program Studi", val: stats.programs, icon: GraduationCap, color: "text-orange-600", bg: "bg-orange-50" },].map((item, i) => (<Card key={i} className="border-0 shadow-sm hover:shadow-md transition-shadow"><CardContent className="p-6 flex items-center gap-4"><div className={cn("p-3 rounded-xl", item.bg, item.color)}><item.icon className="w-6 h-6"/></div><div><p className="text-2xl font-bold text-slate-900">{item.val}</p><p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{item.label}</p></div></CardContent></Card>))}</div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ label: "Level Aktif", val: stats.levels, icon: Crown, color: "text-blue-600", bg: "bg-blue-50" }, { label: "Total Bab", val: stats.lessons, icon: Layers, color: "text-green-600", bg: "bg-green-50" }, { label: "Kosakata", val: stats.vocabs, icon: BookOpen, color: "text-yellow-600", bg: "bg-yellow-50" }, { label: "Program ke Jerman", val: stats.programs, icon: GraduationCap, color: "text-orange-600", bg: "bg-orange-50" },].map((item, i) => (<Card key={i} className="border-0 shadow-sm hover:shadow-md transition-shadow"><CardContent className="p-6 flex items-center gap-4"><div className={cn("p-3 rounded-xl", item.bg, item.color)}><item.icon className="w-6 h-6"/></div><div><p className="text-2xl font-bold text-slate-900">{item.val}</p><p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{item.label}</p></div></CardContent></Card>))}</div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><Card className="border-0 shadow-sm bg-gradient-to-br from-slate-900 to-slate-800 text-white"><CardContent className="p-8"><div className="mb-6"><h3 className="text-xl font-bold mb-2">Ingin menambah data massal?</h3><p className="text-slate-400 text-sm">Gunakan fitur import JSON untuk mempercepat proses input materi dan kosakata.</p></div><Button onClick={() => setActiveMenu("import")} className="bg-white text-black hover:bg-slate-200 font-bold border-0">Mulai Import JSON</Button></CardContent></Card></div>
                       </div>
                   )}
@@ -525,8 +562,33 @@ const AdminPage = () => {
                       <div className="space-y-6 animate-in fade-in duration-300">
                           <div className="flex items-center justify-between"><h2 className="text-2xl font-bold text-slate-900">Kelola Kosakata</h2></div>
                           <Card className="border shadow-sm"><CardContent className="p-6 grid md:grid-cols-2 gap-6"><div className="space-y-2"><Label className="text-xs uppercase text-slate-500 font-bold">Pilih Level</Label><Select onValueChange={(val) => setSelectedLevelId(val)}><SelectTrigger className="h-11 bg-slate-50 border-slate-200"><SelectValue placeholder="Pilih Level..." /></SelectTrigger><SelectContent>{levels.map(l => <SelectItem key={l.id} value={l.id}>{l.id} - {l.title}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label className="text-xs uppercase text-slate-500 font-bold">Pilih Bab</Label><Select disabled={!selectedLevelId} onValueChange={(val) => setSelectedLessonId(val)} value={selectedLessonId || ""}><SelectTrigger className="h-11 bg-slate-50 border-slate-200"><SelectValue placeholder={isLoadingData ? "Loading..." : "Pilih Bab..."} /></SelectTrigger><SelectContent>{lessons.map(l => <SelectItem key={l.id} value={l.id}>{l.title}</SelectItem>)}</SelectContent></Select></div></CardContent></Card>
-                          {selectedLevelId && !selectedLessonId && (<Card className="border shadow-sm"><div className="p-4 border-b flex justify-between items-center bg-slate-50/50"><h3 className="font-bold text-slate-700">Daftar Bab ({selectedLevelId})</h3><Button onClick={() => openCreateDialog("lesson")} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-bold"><Plus className="w-4 h-4 mr-1"/> Bab Baru</Button></div><Table><TableHeader><TableRow><TableHead>Index</TableHead><TableHead>Judul</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader><TableBody>{lessons.map(ls => (<TableRow key={ls.id}><TableCell className="font-bold text-slate-500">#{ls.order_index}</TableCell><TableCell className="font-medium">{ls.title}</TableCell><TableCell className="text-right space-x-2"><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditDialog(ls, "lesson")}><Edit2 className="w-4 h-4 text-slate-500"/></Button><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleDelete(ls.id, "lesson")}><Trash2 className="w-4 h-4 text-red-500"/></Button></TableCell></TableRow>))}</TableBody></Table></Card>)}
-                          {selectedLessonId && (<Card className="border shadow-sm"><div className="p-4 border-b flex justify-between items-center bg-slate-50/50"><h3 className="font-bold text-slate-700">Daftar Kata</h3><Button onClick={() => openCreateDialog("vocab")} size="sm" className="bg-green-600 hover:bg-green-700 text-white font-bold"><Plus className="w-4 h-4 mr-1"/> Kata Baru</Button></div><Table><TableHeader><TableRow><TableHead>Jerman</TableHead><TableHead>Indonesia</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader><TableBody>{vocabs.map(v => (<TableRow key={v.id}><TableCell className="font-bold text-blue-700">{v.german}</TableCell><TableCell>{v.indonesian}</TableCell><TableCell className="text-right space-x-2"><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditDialog(v, "vocab")}><Edit2 className="w-4 h-4 text-slate-500"/></Button><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleDelete(v.id, "vocab")}><Trash2 className="w-4 h-4 text-red-500"/></Button></TableCell></TableRow>))}</TableBody></Table></Card>)}
+                          {selectedLevelId && !selectedLessonId && (<Card className="border shadow-sm"><div className="p-4 border-b flex justify-between items-center bg-slate-50/50"><h3 className="font-bold text-slate-700">Daftar Bab ({selectedLevelId})</h3><Button onClick={() => openCreateDialog("lesson")} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-bold"><Plus className="w-4 h-4 mr-1"/> Bab Baru</Button></div><Table><TableHeader><TableRow><TableHead>Index</TableHead><TableHead>Judul</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader><TableBody>{lessons.map(ls => (<TableRow key={ls.id}><TableCell className="font-bold text-slate-500">#{ls.order_index}</TableCell><TableCell className="font-medium">{ls.title}</TableCell><TableCell className="text-right space-x-2"><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditDialog(ls, "lesson")}><Edit2 className="w-4 h-4 text-slate-500"/></Button><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => confirmDelete(ls, "lesson")}><Trash2 className="w-4 h-4 text-red-500"/></Button></TableCell></TableRow>))}</TableBody></Table></Card>)}
+                          {selectedLessonId && (
+                            <Card className="border shadow-sm">
+                              <div className="p-4 border-b flex justify-between items-center bg-slate-50/50">
+                                <div>
+                                  <h3 className="font-bold text-slate-700">Daftar Kata <span className="text-xs text-slate-400">({vocabs.length} kata)</span></h3>
+                                </div>
+                                <Button onClick={() => openCreateDialog("vocab")} size="sm" className="bg-green-600 hover:bg-green-700 text-white font-bold"><Plus className="w-4 h-4 mr-1"/> Kata Baru</Button>
+                              </div>
+                              <div className="p-4 border-b bg-white">
+                                <div className="relative">
+                                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/>
+                                  <Input placeholder="Cari kata Jerman atau Indonesia..." className="pl-9" value={vocabSearchTerm} onChange={(e) => setVocabSearchTerm(e.target.value)} />
+                                </div>
+                              </div>
+                              <div className="max-h-[500px] overflow-y-auto">
+                                <Table>
+                                  <TableHeader><TableRow><TableHead>Jerman</TableHead><TableHead>Indonesia</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+                                  <TableBody>
+                                    {vocabs.filter(v => v.german.toLowerCase().includes(vocabSearchTerm.toLowerCase()) || v.indonesian.toLowerCase().includes(vocabSearchTerm.toLowerCase())).map(v => (
+                                      <TableRow key={v.id}><TableCell className="font-bold text-blue-700">{v.german}</TableCell><TableCell>{v.indonesian}</TableCell><TableCell className="text-right space-x-2"><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditDialog(v, "vocab")}><Edit2 className="w-4 h-4 text-slate-500"/></Button><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => confirmDelete(v, "vocab")}><Trash2 className="w-4 h-4 text-red-500"/></Button></TableCell></TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </Card>
+                          )}
                       </div>
                   )}
 
@@ -554,7 +616,7 @@ const AdminPage = () => {
                                         <p className="line-clamp-none whitespace-pre-wrap">{mat.content.find((c: any) => c.type === 'text').content}</p>
                                       ) : "Tidak ada preview teks."}
                                     </div>
-                                    <div className="mt-auto flex gap-2 pt-4 border-t border-slate-50"><Button onClick={() => openMaterialDialog(mat)} variant="outline" size="sm" className="flex-1 h-9 text-xs font-bold border-slate-200 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"><Edit2 className="w-3 h-3 mr-2"/> Edit</Button><Button onClick={() => handleDelete(mat.id, "material")} variant="ghost" size="sm" className="h-9 w-9 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50"><Trash2 className="w-4 h-4"/></Button></div>
+                                    <div className="mt-auto flex gap-2 pt-4 border-t border-slate-50"><Button onClick={() => openMaterialDialog(mat)} variant="outline" size="sm" className="flex-1 h-9 text-xs font-bold border-slate-200 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"><Edit2 className="w-3 h-3 mr-2"/> Edit</Button><Button onClick={() => confirmDelete(mat, "material")} variant="ghost" size="sm" className="h-9 w-9 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50"><Trash2 className="w-4 h-4"/></Button></div>
                                 </div>
                               ))}
                           </div>
@@ -565,7 +627,7 @@ const AdminPage = () => {
                   {activeMenu === "program" && (
                     <div className="space-y-6 animate-in fade-in duration-300">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <h2 className="text-2xl font-bold text-slate-900">Program Studi</h2>
+                            <h2 className="text-2xl font-bold text-slate-900">Program ke Jerman</h2>
                             <div className="flex gap-2 bg-white p-1 rounded-lg border shadow-sm">
                                 <button onClick={() => setProgramFilter("all")} className={cn("px-4 py-1.5 rounded-md text-sm font-bold transition-all", programFilter === "all" ? "bg-orange-600 text-white shadow" : "text-slate-500 hover:bg-slate-50")}>Semua</button>
                                 <button onClick={() => setProgramFilter("general")} className={cn("px-4 py-1.5 rounded-md text-sm font-bold transition-all", programFilter === "general" ? "bg-orange-600 text-white shadow" : "text-slate-500 hover:bg-slate-50")}>Program Umum</button>
@@ -593,7 +655,7 @@ const AdminPage = () => {
                                     <p className="text-xs text-slate-400 mb-4 line-clamp-none flex-grow break-words">{prog.description}</p>
                                     <div className="mt-auto flex gap-2 pt-4 border-t border-slate-50">
                                         <Button onClick={() => openProgramDialog(prog)} variant="outline" size="sm" className="flex-1 h-9 text-xs font-bold border-slate-200 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600"><Edit2 className="w-3 h-3 mr-2"/> Edit</Button>
-                                        <Button onClick={() => handleDelete(prog.id, "program")} variant="ghost" size="sm" className="h-9 w-9 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50"><Trash2 className="w-4 h-4"/></Button>
+                                        <Button onClick={() => confirmDelete(prog, "program")} variant="ghost" size="sm" className="h-9 w-9 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50"><Trash2 className="w-4 h-4"/></Button>
                                     </div>
                                 </div>
                             ))}
@@ -632,9 +694,13 @@ const AdminPage = () => {
                                                         <Plus className="w-4 h-4 mr-2"/> Tambah Soal Baru
                                                     </Button>
                                                     {quizQuestions.map((q, idx) => (
-                                                        <div key={q.id} className={cn("p-3 rounded border text-left text-sm cursor-pointer hover:bg-slate-50 transition-colors group flex justify-between items-start", editingQuestion?.id === q.id ? "border-blue-500 bg-blue-50" : "border-slate-200")} onClick={() => loadQuestionForEdit(q)}>
-                                                            <div className="line-clamp-2 flex-1"><span className="font-bold mr-2 text-slate-400">#{idx+1}</span>{q.question}</div>
-                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-300 hover:text-red-500 -mt-1 -mr-1" onClick={(e) => {e.stopPropagation(); handleDelete(q.id, "quiz_question")}}><Trash2 className="w-3 h-3"/></Button>
+                                                        <div key={q.id} className={cn("p-3 rounded border text-left text-sm cursor-pointer hover:bg-slate-50 transition-colors group flex justify-between items-center gap-2", editingQuestion?.id === q.id ? "border-blue-500 bg-blue-50" : "border-slate-200")} onClick={() => loadQuestionForEdit(q)}>
+                                                            <div className="flex-1 line-clamp-2"><span className="font-bold mr-2 text-slate-400">#{q.order_index}</span>{q.question}</div>
+                                                            <div className="flex flex-col gap-0.5 shrink-0">
+                                                                <Button variant="ghost" size="icon" className="h-5 w-5 hover:bg-slate-200" onClick={(e) => {e.stopPropagation(); handleMoveQuizQuestion(q, 'up')}}><ArrowUp className="w-3 h-3"/></Button>
+                                                                <Button variant="ghost" size="icon" className="h-5 w-5 hover:bg-slate-200" onClick={(e) => {e.stopPropagation(); handleMoveQuizQuestion(q, 'down')}}><ArrowDown className="w-3 h-3"/></Button>
+                                                            </div>
+                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-300 hover:text-red-500 shrink-0" onClick={(e) => {e.stopPropagation(); confirmDelete(q, "quiz_question")}}><Trash2 className="w-3 h-3"/></Button>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -679,7 +745,7 @@ const AdminPage = () => {
                       <div className="space-y-6 animate-in fade-in duration-300">
                           <h2 className="text-2xl font-bold text-slate-900">Import JSON</h2>
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                              <Card className="lg:col-span-1 border-0 shadow-sm h-fit"><CardContent className="p-6 space-y-4"><div className="space-y-2"><Label className="text-xs font-bold uppercase text-slate-500">Tipe Data</Label><Select value={importType} onValueChange={(val: any) => setImportType(val)}><SelectTrigger className="font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="vocab">KOSAKATA</SelectItem><SelectItem value="material">MATERI</SelectItem><SelectItem value="quiz">QUIZ / SOAL</SelectItem><SelectItem value="program">PROGRAM STUDI</SelectItem></SelectContent></Select></div><div className="bg-slate-50 p-4 rounded-lg border text-xs font-mono text-slate-600 overflow-auto max-h-[400px]"><p className="font-bold mb-2 text-slate-400">Template:</p><pre className="whitespace-pre-wrap break-words">{getPlaceholder()}</pre></div></CardContent></Card>
+                              <Card className="lg:col-span-1 border-0 shadow-sm h-fit"><CardContent className="p-6 space-y-4"><div className="space-y-2"><Label className="text-xs font-bold uppercase text-slate-500">Tipe Data</Label><Select value={importType} onValueChange={(val: any) => setImportType(val)}><SelectTrigger className="font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="vocab">KOSAKATA</SelectItem><SelectItem value="material">MATERI</SelectItem><SelectItem value="quiz">QUIZ / SOAL</SelectItem><SelectItem value="program">PROGRAM ke Jerman</SelectItem></SelectContent></Select></div><div className="bg-slate-50 p-4 rounded-lg border text-xs font-mono text-slate-600 overflow-auto max-h-[400px]"><p className="font-bold mb-2 text-slate-400">Template:</p><pre className="whitespace-pre-wrap break-words">{getPlaceholder()}</pre></div></CardContent></Card>
                               <Card className="lg:col-span-2 border-0 shadow-sm flex flex-col"><CardHeader className="border-b bg-slate-50/50"><CardTitle className="text-base font-bold flex items-center gap-2"><FileCode className="w-4 h-4"/> Editor</CardTitle></CardHeader><CardContent className="p-0 flex-1 flex flex-col"><Textarea className="flex-1 min-h-[400px] border-0 rounded-none p-6 font-mono text-xs focus-visible:ring-0 bg-white" placeholder="// Paste JSON di sini..." value={jsonInput} onChange={(e) => setJsonInput(e.target.value)} spellCheck={false} /><div className="p-4 border-t bg-slate-50 flex justify-end"><Button onClick={handleSmartImport} disabled={isUploading || !jsonInput} className="font-bold bg-black text-white hover:bg-slate-800">{isUploading ? <Loader2 className="animate-spin w-4 h-4 mr-2"/> : <UploadCloud className="w-4 h-4 mr-2"/>} Proses Import</Button></div></CardContent></Card>
                           </div>
                       </div>
@@ -687,6 +753,21 @@ const AdminPage = () => {
               </div>
           </div>
       </main>
+
+      {/* --- CUSTOM DELETE CONFIRMATION DIALOG --- */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+         <DialogContent className="max-w-[90vw] sm:max-w-sm rounded-2xl p-6">
+            <DialogHeader className="flex flex-col items-center gap-2 text-center pb-2">
+                <div className="p-3 bg-red-100 rounded-full text-red-600"><AlertTriangle className="w-8 h-8" /></div>
+                <DialogTitle className="text-xl">Yakin hapus data ini?</DialogTitle>
+                <DialogDescription>Data yang dihapus tidak bisa dikembalikan lagi.</DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex flex-row justify-center gap-2 pt-2">
+                <Button variant="outline" className="flex-1" onClick={() => setDeleteDialogOpen(false)}>Batal</Button>
+                <Button variant="destructive" className="flex-1" onClick={performDelete} disabled={isUploading}>{isUploading ? <Loader2 className="w-4 h-4 animate-spin"/> : "Ya, Hapus"}</Button>
+            </DialogFooter>
+         </DialogContent>
+      </Dialog>
 
       {/* --- DIALOG EDIT FORM (VOCAB/LESSON) --- */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -721,21 +802,39 @@ const AdminPage = () => {
                       <div className="space-y-1"><Label className="text-xs font-bold">ID Unik (Section ID)</Label><Input value={materialForm.section_id} onChange={e => setMaterialForm({...materialForm, section_id: e.target.value})} className="font-mono text-xs" placeholder="a1_1_intro"/></div>
                       <div className="grid grid-cols-2 gap-2"><div className="space-y-1"><Label className="text-xs font-bold">Urutan</Label><Input type="number" value={materialForm.order_index} onChange={e => setMaterialForm({...materialForm, order_index: parseInt(e.target.value)})} /></div><div className="space-y-1"><Label className="text-xs font-bold">Level</Label><Select value={materialForm.level_id} onValueChange={(val) => setMaterialForm({...materialForm, level_id: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{levels.map(l => <SelectItem key={l.id} value={l.id}>{l.id}</SelectItem>)}</SelectContent></Select></div></div>
                       
-                      {/* RESOURCE LINK EDITOR */}
+                      {/* RESOURCE LINK EDITOR - UPDATED WITH TYPE DROPDOWN */}
                       <div className="border-t pt-4 space-y-2">
                         <Label className="text-xs font-bold">Referensi / Link Luar</Label>
                         {materialForm.resources.map((res, idx) => (
-                           <div key={idx} className="flex gap-2 items-start">
-                             <div className="flex-1 space-y-1">
-                               <Label className="text-[10px] text-slate-400">Judul Link</Label>
-                               <Input placeholder="Contoh: Video Youtube" className="text-xs h-8" value={res.title} onChange={e => {const r = [...materialForm.resources]; r[idx].title = e.target.value; setMaterialForm({...materialForm, resources: r})}} />
-                               <Label className="text-[10px] text-slate-400">URL</Label>
-                               <Input placeholder="https://..." className="text-xs h-8" value={res.url} onChange={e => {const r = [...materialForm.resources]; r[idx].url = e.target.value; setMaterialForm({...materialForm, resources: r})}} />
+                           <div key={idx} className="flex gap-2 items-start p-2 bg-slate-50 rounded border">
+                             <div className="flex-1 space-y-2">
+                               <div className="flex gap-2">
+                                   <div className="flex-1">
+                                       <Label className="text-[10px] text-slate-400">Judul Link</Label>
+                                       <Input placeholder="Contoh: Video Youtube" className="text-xs h-8" value={res.title} onChange={e => {const r = [...materialForm.resources]; r[idx].title = e.target.value; setMaterialForm({...materialForm, resources: r})}} />
+                                   </div>
+                                   <div className="w-1/3">
+                                       <Label className="text-[10px] text-slate-400">Tipe</Label>
+                                       <Select value={res.type} onValueChange={(val) => {const r = [...materialForm.resources]; r[idx].type = val; setMaterialForm({...materialForm, resources: r})}}>
+                                            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="web">🌐 Web</SelectItem>
+                                                <SelectItem value="pdf">📄 PDF</SelectItem>
+                                                <SelectItem value="video">🎥 Video</SelectItem>
+                                                <SelectItem value="audio">🎧 Audio</SelectItem>
+                                            </SelectContent>
+                                       </Select>
+                                   </div>
+                               </div>
+                               <div>
+                                   <Label className="text-[10px] text-slate-400">URL</Label>
+                                   <Input placeholder="https://..." className="text-xs h-8" value={res.url} onChange={e => {const r = [...materialForm.resources]; r[idx].url = e.target.value; setMaterialForm({...materialForm, resources: r})}} />
+                               </div>
                              </div>
-                             <Button variant="ghost" size="icon" className="h-8 w-8 mt-6" onClick={() => {const r = materialForm.resources.filter((_, i) => i !== idx); setMaterialForm({...materialForm, resources: r})}}><Trash2 className="w-3 h-3 text-red-400"/></Button>
+                             <Button variant="ghost" size="icon" className="h-8 w-8 mt-6 text-slate-400 hover:text-red-500" onClick={() => {const r = materialForm.resources.filter((_, i) => i !== idx); setMaterialForm({...materialForm, resources: r})}}><Trash2 className="w-4 h-4"/></Button>
                            </div>
                         ))}
-                        <Button variant="outline" size="sm" className="w-full text-xs mt-2" onClick={() => setMaterialForm({...materialForm, resources: [...materialForm.resources, {title: "", url: ""}]})}><Plus className="w-3 h-3 mr-1"/> Tambah Link</Button>
+                        <Button variant="outline" size="sm" className="w-full text-xs mt-2" onClick={() => setMaterialForm({...materialForm, resources: [...materialForm.resources, {title: "", url: "", type: "web"}]})}><Plus className="w-3 h-3 mr-1"/> Tambah Link</Button>
                       </div>
                   </div>
                   

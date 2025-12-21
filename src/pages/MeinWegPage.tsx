@@ -36,9 +36,10 @@ interface UsefulLink {
   description: string;
 }
 
-// Helper grouping jurusan
-const categories = {
-  health: "Kesehatan & Sosial (Gesundheit)",
+// Label Kategori Default (Untuk mempercantik tampilan)
+const categoryLabels: Record<string, string> = {
+  general: "Program Umum",
+  health: "Kesehatan (Gesundheit)",
   tech: "Teknik & Industri (Technik)",
   business: "Bisnis & Admin (Kaufmännisch)",
   gastro: "Hospitality & Service",
@@ -48,12 +49,12 @@ const categories = {
   social: "Sosial & Lingkungan"
 };
 
-// --- DEFAULT PROGRAM (Untuk menghindari error objek kosong) ---
+// --- DEFAULT PROGRAM ---
 const defaultProgram: Program = {
   id: "loading",
   title: "Memuat Data...",
   category: null,
-  description: "Sedang mengambil data terbaru...",
+  description: "Pilih program untuk melihat detail.",
   salary: "-",
   duration: "-",
   source: null,
@@ -66,6 +67,9 @@ const MeinWegPage = () => {
   const [programsData, setProgramsData] = useState<Record<string, Program>>({});
   const [isLoading, setIsLoading] = useState(true);
   
+  // State untuk filter dinamis
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+
   const [mainCategory, setMainCategory] = useState<string>("aupair");
   const [selectedMajor, setSelectedMajor] = useState<string>("aus_general");
   const [filterCat, setFilterCat] = useState<string>("all");
@@ -88,8 +92,14 @@ const MeinWegPage = () => {
         if (linkError) throw linkError;
 
         const formattedData: Record<string, Program> = {};
+        const categoriesFound = new Set<string>();
 
         progData?.forEach((p) => {
+          // Kumpulkan kategori unik untuk filter dropdown
+          if (p.category && p.id.startsWith("aus_") && p.id !== "aus_general") {
+             categoriesFound.add(p.category);
+          }
+
           formattedData[p.id] = {
             ...p,
             requirements: reqData
@@ -102,6 +112,17 @@ const MeinWegPage = () => {
         });
 
         setProgramsData(formattedData);
+        
+        // Urutkan kategori: yang default di atas, custom di bawah
+        const defaultKeys = Object.keys(categoryLabels);
+        const sortedCats = Array.from(categoriesFound).sort((a, b) => {
+             const isADefault = defaultKeys.includes(a);
+             const isBDefault = defaultKeys.includes(b);
+             if (isADefault && !isBDefault) return -1;
+             if (!isADefault && isBDefault) return 1;
+             return a.localeCompare(b);
+        });
+        setAvailableCategories(sortedCats);
 
       } catch (error) {
         console.error("Error fetching programs:", error);
@@ -115,13 +136,12 @@ const MeinWegPage = () => {
 
   // --- LOGIKA PROGRAM AKTIF ---
   const activeProgramId = mainCategory === "aus_general" || mainCategory.startsWith("aus_") ? selectedMajor : mainCategory;
-  
-  // Gunakan defaultProgram jika data belum ada/tidak ditemukan
   const currentProgram = programsData[activeProgramId] || programsData["aus_general"] || defaultProgram;
 
   const reqIds = currentProgram.requirements.map(r => r.id);
   const progressPercent = getProgress(reqIds);
 
+  // Filter Jurusan Ausbildung (Hanya yang ID depannya 'aus_' dan bukan 'aus_general')
   const ausbildungOptions = Object.values(programsData).filter(p => {
     const isAusbildung = p.id.startsWith("aus_") && p.id !== "aus_general";
     const matchCategory = filterCat === "all" || p.category === filterCat;
@@ -176,6 +196,7 @@ const MeinWegPage = () => {
             {/* SIDEBAR MENU */}
             <div className="lg:col-span-1 space-y-2">
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-2">Jalur Program</p>
+            
             {[
                 { id: "aupair", label: "Au Pair" },
                 { id: "fsj", label: "FSJ / BFD (Sosial)" },
@@ -215,7 +236,7 @@ const MeinWegPage = () => {
           <div className="lg:col-span-3">
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               
-              {/* --- FILTER & SELECTOR AUSBILDUNG --- */}
+              {/* --- FILTER & SELECTOR AUSBILDUNG (DINAMIS) --- */}
               {(mainCategory === "aus_general" || mainCategory.startsWith("aus_")) && (
                   <Card className="border-4 border-foreground bg-slate-100">
                       <CardContent className="p-4 space-y-4">
@@ -232,13 +253,11 @@ const MeinWegPage = () => {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all" className="font-bold">Semua Bidang</SelectItem>
-                                        <SelectItem value="health" className="font-bold">Kesehatan (Medis)</SelectItem>
-                                        <SelectItem value="tech" className="font-bold">Teknik & IT</SelectItem>
-                                        <SelectItem value="business" className="font-bold">Bisnis & Kantor</SelectItem>
-                                        <SelectItem value="gastro" className="font-bold">Hotel & Restoran</SelectItem>
-                                        <SelectItem value="craft" className="font-bold">Konstruksi & Teknik Sipil</SelectItem>
-                                        <SelectItem value="logistics" className="font-bold">Logistik & Transport</SelectItem>
-                                        <SelectItem value="science" className="font-bold">Sains & Lab</SelectItem>
+                                        {availableCategories.map((cat) => (
+                                          <SelectItem key={cat} value={cat} className="font-medium capitalize">
+                                            {categoryLabels[cat] || cat} {/* Pakai label cantik jika ada, kalau tidak pakai raw string */}
+                                          </SelectItem>
+                                        ))}
                                     </SelectContent>
                                   </Select>
                               </div>
@@ -264,6 +283,7 @@ const MeinWegPage = () => {
               )}
 
               {/* --- INFO CARD DETAIL --- */}
+              {currentProgram.id !== "loading" ? (
               <Card className="border-4 border-foreground shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white overflow-hidden">
                 <CardHeader className="bg-slate-50 border-b-2 border-slate-100 p-6">
                   <div className="flex flex-col md:flex-row justify-between items-start gap-4">
@@ -273,10 +293,9 @@ const MeinWegPage = () => {
                           currentProgram.category === "health" ? "bg-red-100 text-red-700 border-red-200" :
                           currentProgram.category === "tech" ? "bg-blue-100 text-blue-700 border-blue-200" :
                           currentProgram.category === "business" ? "bg-purple-100 text-purple-700 border-purple-200" :
-                          currentProgram.category === "social" ? "bg-green-100 text-green-700 border-green-200" :
                           "bg-slate-200 text-slate-700 border-slate-300"
                       )}>
-                          {currentProgram.category ? categories[currentProgram.category as keyof typeof categories] : "Program Umum"}
+                          {currentProgram.category ? (categoryLabels[currentProgram.category] || currentProgram.category) : "Program Umum"}
                       </span>
                       
                       <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-3">{currentProgram.title}</h2>
@@ -298,7 +317,7 @@ const MeinWegPage = () => {
                       )}
                     </div>
 
-                    {currentProgram.requirements.length > 0 && (
+                    {currentProgram.requirements && currentProgram.requirements.length > 0 && (
                         <div className="hidden md:flex flex-col items-center justify-center p-6 bg-white rounded-2xl border-4 border-slate-100 shadow-sm min-w-[120px]">
                             <div className={cn("text-4xl font-black", progressPercent === 100 ? "text-green-600" : "text-blue-600")}>
                                 {progressPercent}%
@@ -323,9 +342,10 @@ const MeinWegPage = () => {
                   </div>
                 </CardContent>
               </Card>
+              ) : null}
 
               {/* --- CHECKLIST DOKUMEN --- */}
-              {currentProgram.requirements.length > 0 && (
+              {currentProgram.requirements && currentProgram.requirements.length > 0 && (
                   <Card className="border-4 border-foreground shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white overflow-hidden">
                     <CardHeader className="bg-yellow-400 border-b-4 border-foreground py-4 flex flex-row items-center justify-between">
                       <CardTitle className="text-xl font-black flex items-center gap-2 text-black">
@@ -368,7 +388,7 @@ const MeinWegPage = () => {
               )}
               
               {/* --- WEBSITE LINK --- */}
-              {currentProgram.useful_links.length > 0 && (
+              {currentProgram.useful_links && currentProgram.useful_links.length > 0 && (
                   <Card className="border-4 border-foreground shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white overflow-hidden">
                     <CardHeader className="bg-blue-600 text-white border-b-4 border-foreground py-6">
                       <CardTitle className="text-xl font-black flex items-center gap-2"><Globe className="w-6 h-6"/> Website Resmi & Lowongan</CardTitle>
