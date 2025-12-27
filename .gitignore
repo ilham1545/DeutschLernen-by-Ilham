@@ -1,4 +1,4 @@
-# Logs
+# --- LOGS & DEBUG ---
 logs
 *.log
 npm-debug.log*
@@ -7,12 +7,37 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# --- DEPENDENCIES & BUILD ---
 node_modules
 dist
 dist-ssr
-*.local
+build
+out
+.vercel
+.netlify
 
-# Editor directories and files
+# --- ENVIRONMENT VARIABLES (SUPER PENTING) ---
+# Blokir semua file yang berawalan .env
+.env
+.env.*
+# TAPI, izinkan file example ini masuk (whitelist)
+!.env.example
+!.env.test.example
+
+# --- SECURITY & KEYS (TAMBAHAN BARU) ---
+# Mencegah upload private keys atau sertifikat secara tidak sengaja
+*.pem
+*.pub
+*.key
+*.crt
+*.ca-bundle
+*.p12
+
+# --- TESTING & COVERAGE (TAMBAHAN BARU) ---
+coverage
+.nyc_output
+
+# --- EDITOR & OS JUNK ---
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -22,5 +47,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-.env
+Thumbs.db
+ehthumbs.db
