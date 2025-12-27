@@ -211,3 +211,32 @@ input::-webkit-credentials-auto-fill-button {
     position: absolute;
     right: 0;
 }
+
+/* --- ANIMASI PENGUMUMAN (MARQUEE) --- */
+@keyframes marquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+@keyframes marquee-reverse {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-marquee {
+  display: flex;
+  min-width: 100%;
+  animation: marquee 25s linear infinite;
+}
+
+.animate-marquee-reverse {
+  display: flex;
+  min-width: 100%;
+  animation: marquee-reverse 25s linear infinite;
+}
+
+/* Pause saat di-hover supaya user bisa baca */
+.animate-marquee:hover, 
+.animate-marquee-reverse:hover {
+  animation-play-state: paused;
+}

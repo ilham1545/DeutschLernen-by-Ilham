@@ -23,12 +23,13 @@ import RegisterPage from "@/pages/RegisterPage";
 import DashboardPage from "@/pages/DashboardPage";
 import ScrollToTop from "@/components/ScrollToTop";
 import AdminPage from "./pages/AdminPage";
-import ForgotPassword from "./pages/ForgotPasswordPage"
-
-import "./App.css";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import UpdatePasswordPage from "./pages/UpdatePasswordPage";
+
+// Import Komponen Pengumuman
 import { AnnouncementDisplay } from "./components/AnnouncementDisplay";
+
+import "./App.css";
 
 const queryClient = new QueryClient();
 
@@ -37,16 +38,18 @@ const MainLayout = () => {
   const isAdminPage = location.pathname === "/admin";
 
   return (
-    // CHANGE: Pakai 'w-screen' (Viewport Width) bukan w-full biar maksa lebar monitor
     <div className="min-h-screen w-screen bg-background flex flex-col overflow-x-hidden">
       
-      {/* HEADER LOGIC:
-          Tetap di-render tapi di-hidden pakai CSS class saat di Admin.
-          Ini mencegah "White Flash" (kedip putih) karena komponen tidak di-unmount.
-      */}
+      {/* HEADER (Sticky) */}
       <div className={isAdminPage ? "hidden" : "sticky top-0 z-[50] w-full"}>
          <Header />
       </div>
+      
+      {/* 1. PASANG PENGUMUMAN DISINI (Di Bawah Header) 
+          Karena posisinya 'relative' di AnnouncementDisplay.tsx, 
+          dia akan mendorong konten di bawahnya (tidak menumpuk).
+      */}
+      {!isAdminPage && <AnnouncementDisplay />}
       
       {/* KONTEN UTAMA */}
       <main className="flex-1 w-full relative z-0">
@@ -66,7 +69,6 @@ const MainLayout = () => {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/update-password" element={<UpdatePasswordPage />} />
-          <Route path="/announcement-test" element={<AnnouncementDisplay />} />
           
           {/* Admin Page */}
           <Route path="/admin" element={<AdminPage />} />

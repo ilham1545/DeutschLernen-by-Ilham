@@ -480,6 +480,14 @@ const AdminPage = () => {
         else { const { error: err } = await supabase.from("lessons").insert(payload); error = err; }
         if (!error) fetchLessons(selectedLevelId);
       }
+      // NEW: Save Announcement Logic
+      else if (formType === "announcement") {
+          const payload = { title: announcementForm.title, content: announcementForm.content, type: announcementForm.type, direction: announcementForm.direction, is_active: announcementForm.is_active };
+          if (editingItem) { const { error: err } = await supabase.from("announcements").update(payload).eq("id", editingItem.id); error = err; }
+          else { const { error: err } = await supabase.from("announcements").insert(payload); error = err; }
+          if (!error) fetchAnnouncements();
+      }
+
       if (error) throw error;
       toast({ title: "Berhasil! ✅", description: "Data berhasil disimpan." });
       setDialogOpen(false); resetForm(); fetchStats();
@@ -944,7 +952,7 @@ const AdminPage = () => {
                     <div className="space-y-6 animate-in fade-in duration-300">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <h2 className="text-2xl font-bold text-slate-900">Kelola Pengumuman</h2>
-                            <Button onClick={() => setAnnouncementDialogOpen(true)} className="bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/10"><Plus className="w-4 h-4 mr-2"/> Buat Baru</Button>
+                            <Button onClick={() => openAnnouncementDialog(null)} className="bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/10"><Plus className="w-4 h-4 mr-2"/> Buat Baru</Button>
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1043,7 +1051,7 @@ const AdminPage = () => {
                           </div>
                       )}
 
-                      <div className="flex items-center justify-between border p-3 rounded-lg bg-slate-50">
+                      <div className="flex items-center justify-between border p-3 rounded-lg bg-white shadow-none">
                           <Label className="text-xs font-bold">Status Aktif</Label>
                           <Switch className="shadow-none border-none focus-visible:ring-0 data-[state=checked]:bg-green-600 [&_span]:shadow-none" checked={announcementForm.is_active} onCheckedChange={(chk) => setAnnouncementForm({...announcementForm, is_active: chk})} />
                       </div>
