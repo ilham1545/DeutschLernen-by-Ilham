@@ -28,6 +28,7 @@ import ForgotPassword from "./pages/ForgotPasswordPage"
 import "./App.css";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import UpdatePasswordPage from "./pages/UpdatePasswordPage";
+import { AnnouncementDisplay } from "./components/AnnouncementDisplay";
 
 const queryClient = new QueryClient();
 
@@ -65,6 +66,7 @@ const MainLayout = () => {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/update-password" element={<UpdatePasswordPage />} />
+          <Route path="/announcement-test" element={<AnnouncementDisplay />} />
           
           {/* Admin Page */}
           <Route path="/admin" element={<AdminPage />} />

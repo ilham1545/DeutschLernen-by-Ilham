@@ -9,11 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { 
   Loader2, UploadCloud, FileJson, LogOut, Plus, Trash2, Edit2, 
   Layers, BookOpen, Crown, BookText, FileCode, LayoutDashboard, Database,
   Menu, X, Home, ArrowLeft, UserCircle, HelpCircle, Save, AlignLeft, List, Grid3X3, Image as ImageIcon, GraduationCap,
-  ArrowUp, ArrowDown, Link as LinkIcon, RotateCcw, Search, AlertTriangle, MessageCircle, PenTool, CheckCircle2
+  ArrowUp, ArrowDown, Link as LinkIcon, RotateCcw, Search, AlertTriangle, MessageCircle, PenTool, CheckCircle2, Lightbulb, Megaphone, BellRing, MoveHorizontal,
+  Bold, Italic, Underline, Link2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -23,26 +25,22 @@ import { cn } from "@/lib/utils";
 type Level = { id: string; title: string; description: string };
 type Lesson = { id: string; title: string; slug: string; level_id: string; order_index: number };
 type Vocab = { id: string; german: string; indonesian: string; example: string; lesson_id: string };
-
-// FIXED TYPES SESUAI DB BARU (RELASIONAL)
 type Grammar = { id: string; title: string; explanation: string; examples: string; lesson_id: string };
-
-// Dialog Lines sekarang diambil dari tabel terpisah 'dialog_lines'
-// UPDATE: Tambahkan 'indonesian' agar tidak error type
 type DialogLineDB = { id?: string; speaker: string; german: string; indonesian?: string; order_index: number };
 type DialogDB = { id: string; title: string; lesson_id: string; dialog_lines?: DialogLineDB[] }; 
-
 type Exercise = { id: string; question: string; options: string[]; correct_answer: number; lesson_id: string };
-
-type CourseMaterialDB = { id: string; title: string; section_id: string; level_id: string; order_index: number; content: any; resources?: any[] };
+type CourseMaterialDB = { id: string; title: string; section_id: string; level_id: string; order_index: number; content: any; resources?: any[]; tips?: string[] };
 type QuizHeader = { id: string; level: string; title: string };
 type QuizQuestionDB = { id: string; quiz_id: string; question: string; type: string; options: any; correct_answer: any; explanation: string; order_index: number };
 type ProgramDB = {
   id: string; title: string; category: string; description: string; 
-  salary: string; duration: string; source: string; what_you_learn: string[];
+  salary: string; duration: string; source: string; what_you_learn: string[]; highlight: string;
+};
+type AnnouncementDB = {
+    id: string; title: string; type: 'popup' | 'marquee'; direction: 'left' | 'right';
+    content: any; is_active: boolean; created_at: string;
 };
 
-// Default Categories
 const defaultCategoryLabels: Record<string, string> = {
   general: "Program Umum",
   health: "Kesehatan (Gesundheit)",
@@ -60,14 +58,14 @@ const AdminPage = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   
-  // --- STATE GLOBAL ---
+  // --- STATE ---
   const [isAdmin, setIsAdmin] = useState(false);
   const [isCheckingRole, setIsCheckingRole] = useState(true);
-  const [activeMenu, setActiveMenu] = useState<"dashboard" | "vocab" | "material" | "quiz" | "program" | "import">("dashboard");
+  const [activeMenu, setActiveMenu] = useState<"dashboard" | "vocab" | "material" | "quiz" | "program" | "import" | "announcement">("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [fullName, setFullName] = useState("Admin");
 
-  // --- DATA STATE ---
+  // --- DATA ---
   const [levels, setLevels] = useState<Level[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [vocabs, setVocabs] = useState<Vocab[]>([]);
@@ -78,18 +76,17 @@ const AdminPage = () => {
   const [quizzes, setQuizzes] = useState<QuizHeader[]>([]);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDB[]>([]);
   const [programs, setPrograms] = useState<ProgramDB[]>([]);
+  const [announcements, setAnnouncements] = useState<AnnouncementDB[]>([]);
   
   const [categoryList, setCategoryList] = useState<string[]>(Object.keys(defaultCategoryLabels));
-  const [stats, setStats] = useState({ levels: 0, lessons: 0, vocabs: 0, materials: 0, questions: 0, programs: 0 });
+  const [stats, setStats] = useState({ levels: 0, lessons: 0, vocabs: 0, materials: 0, questions: 0, programs: 0, announcements: 0 });
 
-  // --- SELECTION & FILTER STATE ---
   const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [programFilter, setProgramFilter] = useState<"all" | "general" | "ausbildung">("all");
   const [vocabSearchTerm, setVocabSearchTerm] = useState(""); 
   const [activeVocabTab, setActiveVocabTab] = useState<"vocab" | "grammar" | "dialog" | "exercise">("vocab");
 
-  // --- QUIZ EDITOR STATE ---
   const [selectedQuizId, setSelectedQuizId] = useState<string>("");
   const [editingQuestion, setEditingQuestion] = useState<QuizQuestionDB | null>(null);
   const [quizQuestionText, setQuizQuestionText] = useState("");
@@ -100,30 +97,25 @@ const AdminPage = () => {
   const [quizBlankAnswer, setQuizBlankAnswer] = useState("");
   const [quizReorderSentence, setQuizReorderSentence] = useState("");
 
-  // --- IMPORT STATE ---
   const [importType, setImportType] = useState<"vocab" | "material" | "quiz" | "program">("vocab");
   const [jsonInput, setJsonInput] = useState("");
-
-  // --- UI STATE ---
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
-  // Dialogs
   const [dialogOpen, setDialogOpen] = useState(false); 
   const [materialDialogOpen, setMaterialDialogOpen] = useState(false); 
   const [programDialogOpen, setProgramDialogOpen] = useState(false); 
+  const [announcementDialogOpen, setAnnouncementDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false); 
   
   const [editingItem, setEditingItem] = useState<any>(null);
   const [itemToDelete, setItemToDelete] = useState<{id: string, type: string} | null>(null); 
-  const [formType, setFormType] = useState<"level" | "lesson" | "vocab" | "grammar" | "dialog" | "exercise">("vocab");
+  const [formType, setFormType] = useState<"level" | "lesson" | "vocab" | "grammar" | "dialog" | "exercise" | "announcement">("vocab");
   
-  // --- FORM INPUTS (UNIVERSAL) ---
   const [formData, setFormData] = useState({
     id: "", title: "", description: "", slug: "", order_index: 0,
     german: "", indonesian: "", example: "",
     explanation: "", examples: "", 
-    // UPDATE: Tambahkan 'indonesian' di sini agar typescript tidak error saat mapping
     dialog_lines: [] as { speaker: string, german: string, indonesian: string }[],
     question: "", options: ["", "", "", ""], correct_answer_idx: "0"
   });
@@ -131,14 +123,20 @@ const AdminPage = () => {
   const [materialForm, setMaterialForm] = useState({
     id: "", title: "", section_id: "", level_id: "A1", order_index: 0,
     content: [] as any[],
-    resources: [] as { title: string, url: string, type: string }[] 
+    resources: [] as { title: string, url: string, type: string }[],
+    tips: "" 
   });
 
   const [programForm, setProgramForm] = useState({
-    id: "", title: "", category: "general", description: "", salary: "", duration: "", source: "",
+    id: "", title: "", category: "general", description: "", salary: "", duration: "", source: "", highlight: "",
     what_you_learn: [] as string[],
     requirements: [] as { req_id: string, label: string, note: string }[],
     links: [] as { label: string, url: string, description: string }[]
+  });
+
+  const [announcementForm, setAnnouncementForm] = useState({
+      id: "", title: "", type: "popup" as "popup" | "marquee", direction: "left" as "left" | "right", is_active: true,
+      content: [] as any[]
   });
   
   const [isCustomCategory, setIsCustomCategory] = useState(false);
@@ -152,8 +150,10 @@ const AdminPage = () => {
         dialog_lines: [{ speaker: "A", german: "", indonesian: "" }, { speaker: "B", german: "", indonesian: "" }],
         question: "", options: ["", "", "", ""], correct_answer_idx: "0"
     });
+    setAnnouncementForm({ id: "", title: "", type: "popup", direction: "left", is_active: true, content: [{ type: "text", content: "" }] });
   };
 
+  // Helper for Content Blocks
   const addContentBlock = (type: "text" | "list" | "table" | "image") => {
     let newBlock;
     if (type === "text") newBlock = { type: "text", content: "" };
@@ -174,8 +174,55 @@ const AdminPage = () => {
     } else newContent[index] = { ...newContent[index], [key]: value };
     setMaterialForm({ ...materialForm, content: newContent });
   };
-  const getTableAsCSV = (block: any) => { if (!block.headers || !block.rows) return ""; const headerStr = block.headers.join(", "); const rowsStr = block.rows.map((row: string[]) => row.join(", ")).join("\n"); return `${headerStr}\n${rowsStr}`; };
+  
   const removeContentBlock = (index: number) => { const newContent = materialForm.content.filter((_, i) => i !== index); setMaterialForm({ ...materialForm, content: newContent }); };
+
+  // Helper for Announcement Content Blocks
+  const addAnnounceBlock = (type: "text" | "list" | "table" | "image") => {
+      let newBlock;
+      if (type === "text") newBlock = { type: "text", content: "" };
+      else if (type === "list") newBlock = { type: "list", items: ["Item 1", "Item 2"] };
+      else if (type === "image") newBlock = { type: "image", src: "", alt: "Deskripsi" };
+      else if (type === "table") newBlock = { type: "table", headers: ["A", "B"], rows: [["1", "2"]] };
+      setAnnouncementForm(prev => ({ ...prev, content: [...prev.content, newBlock] }));
+  };
+  
+  const updateAnnounceBlock = (index: number, key: string, value: any) => {
+      const newContent = [...announcementForm.content];
+      if (newContent[index].type === "list" && key === "items_raw") newContent[index].items = value.split("\n");
+      else if (newContent[index].type === "table" && key === "csv_raw") {
+        const lines = value.split("\n");
+        const headers = lines[0] ? lines[0].split(",").map((s: string) => s.trim()) : [];
+        const rows = lines.slice(1).map((line: string) => line.split(",").map((s: string) => s.trim()));
+        newContent[index].headers = headers; newContent[index].rows = rows;
+      } else newContent[index] = { ...newContent[index], [key]: value };
+      setAnnouncementForm({ ...announcementForm, content: newContent });
+  };
+  
+  const removeAnnounceBlock = (index: number) => { const newContent = announcementForm.content.filter((_, i) => i !== index); setAnnouncementForm({ ...announcementForm, content: newContent }); };
+
+  // Helper for formatting text
+  const formatAnnounceText = (index: number, tag: string, value: string) => {
+      const textarea = document.getElementById(`announce-text-${index}`) as HTMLTextAreaElement;
+      if (!textarea) return;
+
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      if (start === end) return; 
+
+      const selection = value.substring(start, end);
+      let formatted = "";
+
+      if (tag === 'b') formatted = `<b>${selection}</b>`;
+      else if (tag === 'i') formatted = `<i>${selection}</i>`;
+      else if (tag === 'u') formatted = `<u>${selection}</u>`;
+      else if (tag === 'a') formatted = `<a href="#">${selection}</a>`;
+
+      const newValue = value.substring(0, start) + formatted + value.substring(end);
+      updateAnnounceBlock(index, "content", newValue);
+  };
+
+  const getTableAsCSV = (block: any) => { if (!block.headers || !block.rows) return ""; const headerStr = block.headers.join(", "); const rowsStr = block.rows.map((row: string[]) => row.join(", ")).join("\n"); return `${headerStr}\n${rowsStr}`; };
 
   // 1. CEK ROLE & INIT
   useEffect(() => {
@@ -183,7 +230,7 @@ const AdminPage = () => {
       if (!user) { setIsCheckingRole(false); return; }
       const { data } = await supabase.from("profiles").select("role").eq("id", user.id).single();
       if (user.user_metadata?.full_name) setFullName(user.user_metadata.full_name);
-      if (data?.role === "admin") { setIsAdmin(true); fetchLevels(); fetchQuizzes(); fetchStats(); fetchPrograms(); }
+      if (data?.role === "admin") { setIsAdmin(true); fetchLevels(); fetchQuizzes(); fetchStats(); fetchPrograms(); fetchAnnouncements(); }
       setIsCheckingRole(false);
     };
     checkRole();
@@ -197,7 +244,8 @@ const AdminPage = () => {
       const { count: cMaterials } = await supabase.from("course_materials").select("*", { count: "exact", head: true });
       const { count: cQuestions } = await supabase.from("quiz_questions").select("*", { count: "exact", head: true });
       const { count: cPrograms } = await supabase.from("programs").select("*", { count: "exact", head: true });
-      setStats({ levels: cLevels || 0, lessons: cLessons || 0, vocabs: cVocabs || 0, materials: cMaterials || 0, questions: cQuestions || 0, programs: cPrograms || 0 });
+      const { count: cAnnounce } = await supabase.from("announcements").select("*", { count: "exact", head: true });
+      setStats({ levels: cLevels || 0, lessons: cLessons || 0, vocabs: cVocabs || 0, materials: cMaterials || 0, questions: cQuestions || 0, programs: cPrograms || 0, announcements: cAnnounce || 0 });
   };
 
   const fetchLevels = async () => { const { data } = await supabase.from("levels").select("*").order("id"); if (data) setLevels(data); };
@@ -212,32 +260,22 @@ const AdminPage = () => {
           setCategoryList(combinedCats);
       }
   };
+  const fetchAnnouncements = async () => {
+      const { data } = await supabase.from("announcements").select("*").order("created_at", { ascending: false });
+      if (data) setAnnouncements(data);
+  };
 
   const fetchLessons = async (levelId: string) => { setIsLoadingData(true); const { data } = await supabase.from("lessons").select("*").eq("level_id", levelId).order("order_index"); if (data) setLessons(data); setIsLoadingData(false); };
-  
-  // FETCH CONTENT PER SUB-TAB
   const fetchVocabs = async (lessonId: string) => { setIsLoadingData(true); const { data } = await supabase.from("vocabularies").select("*").eq("lesson_id", lessonId).order("german"); if (data) setVocabs(data); setIsLoadingData(false); };
+  const fetchGrammars = async (lessonId: string) => { setIsLoadingData(true); const { data } = await supabase.from("grammars").select("*").eq("lesson_id", lessonId); if (data) setGrammars(data); setIsLoadingData(false); };
   
-  const fetchGrammars = async (lessonId: string) => { 
-      setIsLoadingData(true); 
-      const { data } = await supabase.from("grammars").select("*").eq("lesson_id", lessonId); 
-      if (data) setGrammars(data); 
-      setIsLoadingData(false); 
-  };
-  
-  // FETCH DIALOG DENGAN RELASI KE LINES
   const fetchDialogs = async (lessonId: string) => { 
       setIsLoadingData(true); 
       const { data: dialogsData } = await supabase.from("dialogs").select("*").eq("lesson_id", lessonId);
-      
       if (dialogsData) {
         const dialogIds = dialogsData.map(d => d.id);
         const { data: linesData } = await supabase.from("dialog_lines").select("*").in("dialog_id", dialogIds).order("order_index");
-        
-        const mergedDialogs = dialogsData.map(d => ({
-            ...d,
-            dialog_lines: linesData ? linesData.filter(l => l.dialog_id === d.id) : []
-        }));
+        const mergedDialogs = dialogsData.map(d => ({ ...d, dialog_lines: linesData ? linesData.filter(l => l.dialog_id === d.id) : [] }));
         setDialogs(mergedDialogs); 
       }
       setIsLoadingData(false); 
@@ -247,10 +285,7 @@ const AdminPage = () => {
       setIsLoadingData(true); 
       const { data } = await supabase.from("exercises").select("*").eq("lesson_id", lessonId); 
       if (data) {
-          const parsed = data.map(ex => ({
-              ...ex,
-              options: typeof ex.options === 'string' ? JSON.parse(ex.options) : ex.options
-          }));
+          const parsed = data.map(ex => ({ ...ex, options: typeof ex.options === 'string' ? JSON.parse(ex.options) : ex.options }));
           setExercises(parsed); 
       }
       setIsLoadingData(false); 
@@ -268,10 +303,7 @@ const AdminPage = () => {
 
   useEffect(() => { 
       if (selectedLessonId && activeMenu === "vocab") {
-          fetchVocabs(selectedLessonId);
-          fetchGrammars(selectedLessonId);
-          fetchDialogs(selectedLessonId);
-          fetchExercises(selectedLessonId);
+          fetchVocabs(selectedLessonId); fetchGrammars(selectedLessonId); fetchDialogs(selectedLessonId); fetchExercises(selectedLessonId);
       } 
   }, [selectedLessonId]);
   
@@ -279,7 +311,6 @@ const AdminPage = () => {
       if (selectedQuizId) { fetchQuizQuestions(selectedQuizId); setEditingQuestion(null); setQuizQuestionText(""); setQuizExplanation(""); }
   }, [selectedQuizId]);
 
-  // --- REORDER LOGIC ---
   const handleMoveMaterial = async (item: CourseMaterialDB, direction: 'up' | 'down') => {
       const currentIndex = materials.findIndex(m => m.id === item.id);
       if (currentIndex === -1) return;
@@ -315,31 +346,22 @@ const AdminPage = () => {
       else if (q.type === 'reorder') { setQuizReorderSentence(Array.isArray(q.correct_answer) ? q.correct_answer.join(", ") : ""); }
   };
 
-  const openEditDialog = (item: any, type: "vocab" | "lesson" | "grammar" | "dialog" | "exercise") => { 
-      setFormType(type as any); 
-      setEditingItem(item); 
-      
+  const openEditDialog = (item: any, type: "vocab" | "lesson" | "grammar" | "dialog" | "exercise" | "announcement") => { 
+      setFormType(type as any); setEditingItem(item); 
       if (type === 'vocab') setFormData({ ...formData, ...item });
       else if (type === 'grammar') setFormData({ ...formData, id: item.id, title: item.title, explanation: item.explanation, examples: item.examples });
       else if (type === 'dialog') {
-          // Relational Lines to Form State, handle null indonesian
-          const mappedLines = item.dialog_lines ? item.dialog_lines.map((l: any) => ({
-             speaker: l.speaker,
-             german: l.german,
-             indonesian: l.indonesian || ""
-          })) : [];
+          const mappedLines = item.dialog_lines ? item.dialog_lines.map((l: any) => ({ speaker: l.speaker, german: l.german, indonesian: l.indonesian || "" })) : [];
           setFormData({ ...formData, id: item.id, title: item.title, dialog_lines: mappedLines });
       }
       else if (type === 'exercise') setFormData({ ...formData, id: item.id, question: item.question, options: item.options, correct_answer_idx: String(item.correct_answer) });
+      else if (type === 'announcement') setAnnouncementForm({ id: item.id, title: item.title, content: item.content, type: item.type, direction: item.direction || 'left', is_active: item.is_active });
       else setFormData({ ...formData, ...item });
       setDialogOpen(true); 
   };
   
-  const openCreateDialog = (type: "vocab" | "lesson" | "grammar" | "dialog" | "exercise") => { 
-      setFormType(type as any); 
-      setEditingItem(null); 
-      resetForm(); 
-      setDialogOpen(true); 
+  const openCreateDialog = (type: "vocab" | "lesson" | "grammar" | "dialog" | "exercise" | "announcement") => { 
+      setFormType(type as any); setEditingItem(null); resetForm(); setDialogOpen(true); 
   };
   
   const openMaterialDialog = (item: any | null) => {
@@ -347,34 +369,50 @@ const AdminPage = () => {
       if (item) {
           const rawContent = item.content;
           const parsedContent = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
+          const tipsStr = item.tips && Array.isArray(item.tips) ? item.tips.join("\n") : "";
           setMaterialForm({
               id: item.id, title: item.title, section_id: item.section_id, level_id: item.level_id, order_index: item.order_index,
               content: Array.isArray(parsedContent) ? parsedContent : [],
-              resources: item.resources ? item.resources.map((r: any) => ({...r, type: r.type || 'web'})) : []
+              resources: item.resources ? item.resources.map((r: any) => ({...r, type: r.type || 'web'})) : [],
+              tips: tipsStr
           });
       } else {
-          setMaterialForm({ id: "", title: "", section_id: "", level_id: selectedLevelId || "A1", order_index: 0, content: [{ type: "text", content: "" }], resources: [] });
+          setMaterialForm({ id: "", title: "", section_id: "", level_id: selectedLevelId || "A1", order_index: 0, content: [{ type: "text", content: "" }], resources: [], tips: "" });
       }
       setMaterialDialogOpen(true);
   };
 
   const openProgramDialog = async (item: any | null) => {
-      setEditingItem(item);
-      setIsCustomCategory(false);
+      setEditingItem(item); setIsCustomCategory(false);
       if (item) {
           const { data: reqs } = await supabase.from('program_requirements').select('*').eq('program_id', item.id);
           const { data: links } = await supabase.from('program_links').select('*').eq('program_id', item.id);
           setProgramForm({
               id: item.id, title: item.title, category: item.category || "health", description: item.description || "",
-              salary: item.salary || "", duration: item.duration || "", source: item.source || "",
+              salary: item.salary || "", duration: item.duration || "", source: item.source || "", highlight: item.highlight || "",
               what_you_learn: item.what_you_learn || [],
               requirements: reqs?.map(r => ({ req_id: r.req_id, label: r.label, note: r.note || "" })) || [],
               links: links?.map(l => ({ label: l.label, url: l.url, description: l.description || "" })) || []
           });
       } else {
-          setProgramForm({ id: "", title: "", category: "general", description: "", salary: "", duration: "", source: "", what_you_learn: [], requirements: [], links: [] });
+          setProgramForm({ id: "", title: "", category: "general", description: "", salary: "", duration: "", source: "", highlight: "", what_you_learn: [], requirements: [], links: [] });
       }
       setProgramDialogOpen(true);
+  };
+
+  const openAnnouncementDialog = (item: any | null) => {
+      setEditingItem(item);
+      if (item) {
+          const rawContent = item.content;
+          const parsedContent = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
+          setAnnouncementForm({
+              id: item.id, title: item.title, type: item.type, direction: item.direction || "left", is_active: item.is_active,
+              content: Array.isArray(parsedContent) ? parsedContent : []
+          });
+      } else {
+          setAnnouncementForm({ id: "", title: "", type: "popup", direction: "left", is_active: true, content: [{ type: "text", content: "" }] });
+      }
+      setAnnouncementDialogOpen(true);
   };
 
   const confirmDelete = (item: any, type: string) => { setItemToDelete({ id: item.id, type }); setDeleteDialogOpen(true); }
@@ -392,76 +430,49 @@ const AdminPage = () => {
         else if (type === "material") { await supabase.from("course_materials").delete().eq("id", id); if (selectedLevelId) fetchMaterials(selectedLevelId); }
         else if (type === "program") { await supabase.from("programs").delete().eq("id", id); fetchPrograms(); }
         else if (type === "quiz_question") { await supabase.from("quiz_questions").delete().eq("id", id); fetchQuizQuestions(selectedQuizId); }
+        else if (type === "announcement") { await supabase.from("announcements").delete().eq("id", id); fetchAnnouncements(); }
         toast({ title: "Terhapus", description: "Data berhasil dihapus dari database." }); 
         fetchStats();
     } catch (err) { console.error(err); } finally { setIsUploading(false); setDeleteDialogOpen(false); setItemToDelete(null); }
   };
 
-  // 3. CRUD LOGIC UPDATE
+  // --- CRUD LOGIC ---
+
+  // 1. SAVE BASIC DATA (VOCAB, GRAMMAR, ETC)
   const handleSave = async () => {
     setIsUploading(true);
     try {
       let error = null;
-      
-      // VOCAB
       if (formType === "vocab") {
         if (!selectedLessonId) throw new Error("Pilih Bab dulu!");
         const payload = { german: formData.german, indonesian: formData.indonesian, example: formData.example, lesson_id: selectedLessonId };
         if (editingItem) { const { error: err } = await supabase.from("vocabularies").update(payload).eq("id", editingItem.id); error = err; }
         else { const { error: err } = await supabase.from("vocabularies").insert(payload); error = err; }
         if (!error) fetchVocabs(selectedLessonId);
-      
-      // GRAMMAR
       } else if (formType === "grammar") {
          const payload = { title: formData.title, explanation: formData.explanation, examples: formData.examples, lesson_id: selectedLessonId };
          if (editingItem) { const { error: err } = await supabase.from("grammars").update(payload).eq("id", editingItem.id); error = err; }
          else { const { error: err } = await supabase.from("grammars").insert(payload); error = err; }
          if (!error) fetchGrammars(selectedLessonId!);
-      
-      // DIALOG (RELATIONAL SAVE)
       } else if (formType === "dialog") {
          const payload = { title: formData.title, lesson_id: selectedLessonId };
          let dialogId = editingItem?.id;
-
          if (dialogId) {
-             const { error: err } = await supabase.from("dialogs").update(payload).eq("id", dialogId);
-             if (err) throw err;
+             const { error: err } = await supabase.from("dialogs").update(payload).eq("id", dialogId); if (err) throw err;
          } else {
-             const { data: newDialog, error: err } = await supabase.from("dialogs").insert(payload).select().single();
-             if (err) throw err;
-             dialogId = newDialog.id;
+             const { data: newDialog, error: err } = await supabase.from("dialogs").insert(payload).select().single(); if (err) throw err; dialogId = newDialog.id;
          }
-
-         // Replace Lines
          await supabase.from("dialog_lines").delete().eq("dialog_id", dialogId);
-         
          if (formData.dialog_lines.length > 0) {
-             const linesPayload = formData.dialog_lines.map((line, idx) => ({
-                 dialog_id: dialogId,
-                 speaker: line.speaker,
-                 german: line.german,
-                 indonesian: line.indonesian,
-                 order_index: idx
-             }));
-             const { error: errLines } = await supabase.from("dialog_lines").insert(linesPayload);
-             if (errLines) throw errLines;
+             const linesPayload = formData.dialog_lines.map((line, idx) => ({ dialog_id: dialogId, speaker: line.speaker, german: line.german, indonesian: line.indonesian, order_index: idx }));
+             const { error: errLines } = await supabase.from("dialog_lines").insert(linesPayload); if (errLines) throw errLines;
          }
-         
          if (!error) fetchDialogs(selectedLessonId!);
-      
-      // EXERCISE
       } else if (formType === "exercise") {
-         const payload = { 
-            question: formData.question, 
-            options: formData.options, 
-            correct_answer: parseInt(formData.correct_answer_idx as string), 
-            lesson_id: selectedLessonId 
-         };
+         const payload = { question: formData.question, options: formData.options, correct_answer: parseInt(formData.correct_answer_idx as string), lesson_id: selectedLessonId };
          if (editingItem) { const { error: err } = await supabase.from("exercises").update(payload).eq("id", editingItem.id); error = err; }
          else { const { error: err } = await supabase.from("exercises").insert(payload); error = err; }
          if (!error) fetchExercises(selectedLessonId!);
-      
-      // LESSON
       } else if (formType === "lesson") {
         if (!selectedLevelId) throw new Error("Pilih Level dulu!");
         const payload = { title: formData.title, slug: formData.slug, order_index: formData.order_index, level_id: selectedLevelId };
@@ -469,41 +480,37 @@ const AdminPage = () => {
         else { const { error: err } = await supabase.from("lessons").insert(payload); error = err; }
         if (!error) fetchLessons(selectedLevelId);
       }
-
       if (error) throw error;
       toast({ title: "Berhasil! ✅", description: "Data berhasil disimpan." });
-      setDialogOpen(false);
-      resetForm();
-      fetchStats();
+      setDialogOpen(false); resetForm(); fetchStats();
     } catch (err: any) { toast({ variant: "destructive", title: "Error", description: err.message }); } finally { setIsUploading(false); }
   };
 
-  // ... (Keep other handlers like material save, program save, etc.)
+  // 2. SAVE MATERIAL
   const handleSaveMaterial = async () => {
       setIsUploading(true);
       try {
+          const tipsArray = materialForm.tips.split("\n").filter(t => t.trim() !== "");
           const payload = {
               level_id: materialForm.level_id, section_id: materialForm.section_id, title: materialForm.title,
-              order_index: materialForm.order_index, content: materialForm.content, resources: materialForm.resources 
+              order_index: materialForm.order_index, content: materialForm.content, resources: materialForm.resources,
+              tips: tipsArray
           };
           let error = null;
           if (editingItem) { const { error: err } = await supabase.from("course_materials").update(payload).eq("id", editingItem.id); error = err; }
           else { const { error: err } = await supabase.from("course_materials").insert(payload); error = err; }
           if (error) throw error;
           toast({ title: "Materi Tersimpan! 📚", description: "Database diperbarui." });
-          setMaterialDialogOpen(false);
-          if (selectedLevelId) fetchMaterials(selectedLevelId);
-          fetchStats();
+          setMaterialDialogOpen(false); if (selectedLevelId) fetchMaterials(selectedLevelId); fetchStats();
       } catch (err: any) { toast({ variant: "destructive", title: "Gagal Simpan", description: err.message }); } finally { setIsUploading(false); }
   };
 
+  // 3. SAVE PROGRAM
   const handleSaveProgram = async () => {
       setIsUploading(true);
       try {
         const programPayload = {
-            id: programForm.id, title: programForm.title, category: programForm.category,
-            description: programForm.description, salary: programForm.salary, duration: programForm.duration,
-            source: programForm.source, what_you_learn: programForm.what_you_learn
+            id: programForm.id, title: programForm.title, category: programForm.category, description: programForm.description, salary: programForm.salary, duration: programForm.duration, source: programForm.source, highlight: programForm.highlight, what_you_learn: programForm.what_you_learn
         };
         const { error: progError } = await supabase.from('programs').upsert(programPayload);
         if (progError) throw progError;
@@ -520,12 +527,28 @@ const AdminPage = () => {
             if (linkError) throw linkError;
         }
         toast({ title: "Program Tersimpan! 🎓", description: "Database program diperbarui." });
-        setProgramDialogOpen(false);
-        fetchPrograms();
-        fetchStats();
+        setProgramDialogOpen(false); fetchPrograms(); fetchStats();
       } catch (err: any) { toast({ variant: "destructive", title: "Gagal Simpan Program", description: err.message }); } finally { setIsUploading(false); }
   };
 
+  // 4. SAVE ANNOUNCEMENT (HERE IT IS! 🔥)
+  const handleSaveAnnouncement = async () => {
+      setIsUploading(true);
+      try {
+          const payload = {
+              title: announcementForm.title, type: announcementForm.type, direction: announcementForm.direction,
+              is_active: announcementForm.is_active, content: announcementForm.content
+          };
+          let error = null;
+          if (editingItem) { const { error: err } = await supabase.from("announcements").update(payload).eq("id", editingItem.id); error = err; }
+          else { const { error: err } = await supabase.from("announcements").insert(payload); error = err; }
+          if (error) throw error;
+          toast({ title: "Pengumuman Disimpan! 📢", description: "Database diperbarui." });
+          setAnnouncementDialogOpen(false); fetchAnnouncements(); fetchStats();
+      } catch (err: any) { toast({ variant: "destructive", title: "Gagal Simpan", description: err.message }); } finally { setIsUploading(false); }
+  };
+
+  // 5. SAVE QUIZ
   const handleSaveQuizQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedQuizId) { toast({ variant: "destructive", title: "Error", description: "Pilih level quiz dulu!" }); return; }
@@ -595,13 +618,7 @@ const AdminPage = () => {
     } catch (e: any) { toast({ variant: "destructive", title: "Gagal Import", description: e.message }); } finally { setIsUploading(false); }
   };
 
-  const getPlaceholder = () => {
-      // ... (code for getPlaceholder remains the same - abbreviated for brevity)
-      if (importType === "vocab") return `{\n  "level_id": "A1",\n  "title": "Judul Bab",\n  "slug": "judul_bab_unik",\n  "vocabulary": [\n    { "german": "Apfel", "indonesian": "Apel", "example": "Ich esse..." }\n  ]\n}`;
-      if (importType === "program") return `{\n  "id": "contoh_id",\n  "title": "Nama Program",\n  "category": "health",\n  "description": "Deskripsi...",\n  "salary": "€1000",\n  "duration": "3 Tahun",\n  "whatYouLearn": ["Skill A", "Skill B"],\n  "requirements": [{ "id": "req1", "label": "Syarat A" }],\n  "usefulLinks": [{ "label": "Link A", "url": "..." }]\n}`;
-      if (importType === "quiz") return `{\n  "level": "A2",\n  "title": "Evaluasi Level A2",\n  "questions": [\n    {\n      "type": "multiple-choice",\n      "question": "Was ist das?",\n      "options": ["Hund", "Katze", "Maus"],\n      "correct_answer": "Hund",\n      "explanation": "Penjelasan..."\n    }\n  ]\n}`;
-      return `{\n  "level_id": "A1",\n  "section_id": "unik_id_materi",\n  "title": "Judul Materi",\n  "order_index": 1,\n  "content": [\n    { "type": "text", "content": "Halo dunia.\\nIni contoh paragraf baru."\n    },\n    {\n      "type": "list",\n      "items": ["Poin 1", "Poin 2"]\n    },\n    {\n      "type": "table",\n      "headers": ["A", "B"],\n      "rows": [["1", "2"]]\n    },\n    {\n      "type": "image",\n      "src": "https://placehold.co/600x400",\n      "alt": "Contoh Gambar"\n    }\n  ],\n  "resources": [\n    { "title": "Link Sumber", "url": "https://google.com" }\n  ]\n}`;
-  };
+  const getPlaceholder = () => { return `{\n "note": "Gunakan format JSON yang valid..." \n}` };
 
   if (isCheckingRole) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin h-10 w-10 text-slate-800"/></div>;
   if (!user || !isAdmin) return <div className="h-screen flex items-center justify-center">Access Denied</div>;
@@ -627,6 +644,7 @@ const AdminPage = () => {
               <button onClick={() => {setActiveMenu("program"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "program" ? "bg-orange-50 text-orange-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><GraduationCap className="w-4 h-4"/> Program Studi</button>
               <div className="my-6 border-t border-slate-100"></div>
               <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">System</p>
+              <button onClick={() => {setActiveMenu("announcement"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "announcement" ? "bg-red-50 text-red-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><Megaphone className="w-4 h-4"/> Pengumuman</button>
               <button onClick={() => {setActiveMenu("import"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "import" ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><FileJson className="w-4 h-4"/> Import JSON</button>
           </div>
           <div className="p-4 border-t border-slate-100 bg-slate-50">
@@ -648,7 +666,7 @@ const AdminPage = () => {
                   {activeMenu === "dashboard" && (
                       <div className="space-y-8 animate-in fade-in duration-500">
                           <div className="flex flex-col gap-1"><h1 className="text-3xl font-bold text-slate-900">Selamat Datang, {fullName.split(" ")[0]}.</h1><p className="text-slate-500">Ringkasan statistik konten pembelajaran.</p></div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ label: "Level Aktif", val: stats.levels, icon: Crown, color: "text-blue-600", bg: "bg-blue-50" }, { label: "Total Bab", val: stats.lessons, icon: Layers, color: "text-green-600", bg: "bg-green-50" }, { label: "Kosakata", val: stats.vocabs, icon: BookOpen, color: "text-yellow-600", bg: "bg-yellow-50" }, { label: "Program Studi", val: stats.programs, icon: GraduationCap, color: "text-orange-600", bg: "bg-orange-50" },].map((item, i) => (<Card key={i} className="border-0 shadow-sm hover:shadow-md transition-shadow"><CardContent className="p-6 flex items-center gap-4"><div className={cn("p-3 rounded-xl", item.bg, item.color)}><item.icon className="w-6 h-6"/></div><div><p className="text-2xl font-bold text-slate-900">{item.val}</p><p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{item.label}</p></div></CardContent></Card>))}</div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ label: "Level Aktif", val: stats.levels, icon: Crown, color: "text-blue-600", bg: "bg-blue-50" }, { label: "Total Bab", val: stats.lessons, icon: Layers, color: "text-green-600", bg: "bg-green-50" }, { label: "Kosakata", val: stats.vocabs, icon: BookOpen, color: "text-yellow-600", bg: "bg-yellow-50" }, { label: "Pengumuman", val: stats.announcements, icon: Megaphone, color: "text-red-600", bg: "bg-red-50" },].map((item, i) => (<Card key={i} className="border-0 shadow-sm hover:shadow-md transition-shadow"><CardContent className="p-6 flex items-center gap-4"><div className={cn("p-3 rounded-xl", item.bg, item.color)}><item.icon className="w-6 h-6"/></div><div><p className="text-2xl font-bold text-slate-900">{item.val}</p><p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{item.label}</p></div></CardContent></Card>))}</div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><Card className="border-0 shadow-sm bg-gradient-to-br from-slate-900 to-slate-800 text-white"><CardContent className="p-8"><div className="mb-6"><h3 className="text-xl font-bold mb-2">Ingin menambah data massal?</h3><p className="text-slate-400 text-sm">Gunakan fitur import JSON untuk mempercepat proses input materi dan kosakata.</p></div><Button onClick={() => setActiveMenu("import")} className="bg-white text-black hover:bg-slate-200 font-bold border-0">Mulai Import JSON</Button></CardContent></Card></div>
                       </div>
                   )}
@@ -921,6 +939,49 @@ const AdminPage = () => {
                     </div>
                   )}
 
+                  {/* ANNOUNCEMENT MANAGER */}
+                  {activeMenu === "announcement" && (
+                    <div className="space-y-6 animate-in fade-in duration-300">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <h2 className="text-2xl font-bold text-slate-900">Kelola Pengumuman</h2>
+                            <Button onClick={() => setAnnouncementDialogOpen(true)} className="bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/10"><Plus className="w-4 h-4 mr-2"/> Buat Baru</Button>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {announcements.length === 0 && <p className="col-span-full text-center text-slate-400 py-10">Belum ada pengumuman aktif.</p>}
+                            {announcements.map((ann) => (
+                                <div key={ann.id} className="bg-white border rounded-xl p-5 hover:shadow-lg transition-all group flex flex-col h-full relative">
+                                    <div className="absolute top-4 right-4 flex gap-1">
+                                        <div className={cn("w-2 h-2 rounded-full", ann.is_active ? "bg-green-500" : "bg-slate-300")}></div>
+                                    </div>
+                                    <div className="mb-3">
+                                        <span className={cn("px-2 py-1 text-[10px] font-bold rounded uppercase tracking-wider border", ann.type === 'popup' ? "bg-blue-50 text-blue-600 border-blue-200" : "bg-orange-50 text-orange-600 border-orange-200")}>{ann.type} {ann.type === 'marquee' && `(${ann.direction})`}</span>
+                                    </div>
+                                    <h3 className="font-bold text-lg leading-tight text-slate-800 mb-2">{ann.title}</h3>
+                                    <div className="text-xs text-slate-400 flex-1">
+                                        {Array.isArray(ann.content) && ann.content.length > 0 ? (
+                                            ann.content.find((c: any) => c.type === 'text')?.content || "Konten visual/tabel..."
+                                        ) : "Tidak ada konten."}
+                                    </div>
+                                    <div className="mt-4 pt-4 border-t flex gap-2">
+                                        <Button onClick={() => {
+                                            setEditingItem(ann);
+                                            const rawContent = ann.content;
+                                            const parsedContent = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
+                                            setAnnouncementForm({
+                                                id: ann.id, title: ann.title, type: ann.type, direction: ann.direction || "left", is_active: ann.is_active,
+                                                content: Array.isArray(parsedContent) ? parsedContent : []
+                                            });
+                                            setAnnouncementDialogOpen(true);
+                                        }} variant="outline" size="sm" className="flex-1 h-9 text-xs"><Edit2 className="w-3 h-3 mr-2"/> Edit</Button>
+                                        <Button onClick={() => confirmDelete(ann, "announcement")} variant="ghost" size="sm" className="h-9 w-9 p-0 text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4"/></Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                  )}
+
                   {/* IMPORT MANAGER */}
                   {activeMenu === "import" && (
                       <div className="space-y-6 animate-in fade-in duration-300">
@@ -936,6 +997,100 @@ const AdminPage = () => {
       </main>
 
       {/* --- CUSTOM DELETE CONFIRMATION DIALOG --- */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+         <DialogContent className="max-w-[90vw] sm:max-w-sm rounded-2xl p-6">
+            <DialogHeader className="flex flex-col items-center gap-2 text-center pb-2">
+                <div className="p-3 bg-red-100 rounded-full text-red-600"><AlertTriangle className="w-8 h-8" /></div>
+                <DialogTitle className="text-xl">Yakin hapus data ini?</DialogTitle>
+                <DialogDescription>Data yang dihapus tidak bisa dikembalikan lagi.</DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex flex-row justify-center gap-2 pt-2">
+                <Button variant="outline" className="flex-1" onClick={() => setDeleteDialogOpen(false)}>Batal</Button>
+                <Button variant="destructive" className="flex-1" onClick={performDelete} disabled={isUploading}>{isUploading ? <Loader2 className="w-4 h-4 animate-spin"/> : "Ya, Hapus"}</Button>
+            </DialogFooter>
+         </DialogContent>
+      </Dialog>
+
+      {/* --- ANNOUNCEMENT EDITOR DIALOG --- */}
+      <Dialog open={announcementDialogOpen} onOpenChange={setAnnouncementDialogOpen}>
+          <DialogContent className="max-w-[95vw] w-full h-auto max-h-[85dvh] flex flex-col p-0 overflow-hidden rounded-2xl border-0 shadow-2xl bg-white my-4">
+              <DialogHeader className="px-6 py-4 border-b flex flex-row items-center justify-between bg-slate-50/50 shrink-0">
+                  <DialogTitle className="flex items-center gap-2"><Megaphone className="w-5 h-5 text-red-600"/> Editor Pengumuman</DialogTitle>
+                  <DialogDescription className="hidden">..</DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 flex flex-col md:flex-row overflow-y-auto">
+                  <div className="w-full md:w-80 bg-white p-6 border-b md:border-b-0 md:border-r space-y-4 shrink-0">
+                      <div className="space-y-1"><Label className="text-xs font-bold">Judul Pengumuman</Label><Input value={announcementForm.title} onChange={e => setAnnouncementForm({...announcementForm, title: e.target.value})} className="font-bold" placeholder="Contoh: Maintenance Server"/></div>
+                      
+                      <div className="space-y-1">
+                          <Label className="text-xs font-bold">Tipe Tampilan</Label>
+                          <Select value={announcementForm.type} onValueChange={(val: any) => setAnnouncementForm({...announcementForm, type: val})}>
+                              <SelectTrigger><SelectValue/></SelectTrigger>
+                              <SelectContent>
+                                  <SelectItem value="popup"><span className="flex items-center gap-2"><BellRing className="w-3 h-3"/> Pop-up Modal</span></SelectItem>
+                                  <SelectItem value="marquee"><span className="flex items-center gap-2"><MoveHorizontal className="w-3 h-3"/> Teks Berjalan</span></SelectItem>
+                              </SelectContent>
+                          </Select>
+                      </div>
+
+                      {announcementForm.type === 'marquee' && (
+                          <div className="space-y-1">
+                              <Label className="text-xs font-bold">Arah Gerak</Label>
+                              <div className="flex gap-2">
+                                  <Button size="sm" variant={announcementForm.direction === 'left' ? "default" : "outline"} onClick={() => setAnnouncementForm({...announcementForm, direction: 'left'})} className="flex-1"><ArrowLeft className="w-4 h-4 mr-1"/> Ke Kiri</Button>
+                                  <Button size="sm" variant={announcementForm.direction === 'right' ? "default" : "outline"} onClick={() => setAnnouncementForm({...announcementForm, direction: 'right'})} className="flex-1">Ke Kanan <ArrowLeft className="w-4 h-4 ml-1 rotate-180"/></Button>
+                              </div>
+                          </div>
+                      )}
+
+                      <div className="flex items-center justify-between border p-3 rounded-lg bg-slate-50">
+                          <Label className="text-xs font-bold">Status Aktif</Label>
+                          <Switch className="shadow-none border-none focus-visible:ring-0 data-[state=checked]:bg-green-600 [&_span]:shadow-none" checked={announcementForm.is_active} onCheckedChange={(chk) => setAnnouncementForm({...announcementForm, is_active: chk})} />
+                      </div>
+                  </div>
+
+                  <div className="flex-1 bg-slate-50 p-4 md:p-6 flex flex-col gap-4">
+                      {announcementForm.content.length === 0 && <div className="text-center text-slate-400 py-10 font-medium border-2 border-dashed rounded-xl flex flex-col items-center justify-center h-40"><p>Belum ada konten.</p><p className="text-xs mt-1">Klik tombol di bawah untuk menambah isi pengumuman.</p></div>}
+                      {announcementForm.content.map((block, idx) => (
+                          <div key={idx} className="bg-white border rounded-xl p-4 shadow-sm relative group animate-in slide-in-from-bottom-2 duration-300">
+                              <div className="flex justify-between items-center mb-2"><span className="text-[10px] uppercase font-bold bg-slate-100 px-2 py-1 rounded text-slate-500 select-none cursor-default">{block.type}</span><Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500 hover:bg-red-50" onClick={() => removeAnnounceBlock(idx)}><Trash2 className="w-4 h-4"/></Button></div>
+                              
+                              {/* --- RICH TEXT TOOLBAR --- */}
+                              {block.type === 'text' && (
+                                  <>
+                                    <div className="flex gap-1 mb-2 border-b pb-2">
+                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => formatAnnounceText(idx, 'b', block.content)}><Bold className="w-3 h-3"/></Button>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => formatAnnounceText(idx, 'i', block.content)}><Italic className="w-3 h-3"/></Button>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => formatAnnounceText(idx, 'u', block.content)}><Underline className="w-3 h-3"/></Button>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => formatAnnounceText(idx, 'a', block.content)}><Link2 className="w-3 h-3"/></Button>
+                                    </div>
+                                    <Label className="text-[10px] text-slate-400 mb-1 block">Teks (Support HTML)</Label>
+                                    <Textarea id={`announce-text-${idx}`} value={block.content} onChange={(e) => updateAnnounceBlock(idx, "content", e.target.value)} placeholder="Tulis isi pengumuman..." className="min-h-[100px]" />
+                                  </>
+                              )}
+                              
+                              {block.type === 'list' && (<div className="space-y-1"><Label className="text-[10px] text-slate-400 mb-1 block">List Item (Pisahkan dengan Enter)</Label><Textarea value={block.items?.join("\n")} onChange={(e) => updateAnnounceBlock(idx, "items_raw", e.target.value)} placeholder="• Poin 1&#10;• Poin 2" className="min-h-[100px] bg-slate-50" /></div>)}
+                              {block.type === 'image' && (<div className="space-y-3"><Label className="text-[10px] text-slate-400 block">Link Gambar</Label><Input value={block.src} onChange={(e) => updateAnnounceBlock(idx, "src", e.target.value)} placeholder="https://..." /></div>)}
+                              {block.type === 'table' && (<div className="space-y-2"><Label className="text-[10px] text-slate-400 block">Format CSV</Label><Textarea defaultValue={getTableAsCSV(block)} onBlur={(e) => updateAnnounceBlock(idx, "csv_raw", e.target.value)} placeholder="Kolom A, Kolom B&#10;Data 1, Data 2" className="min-h-[100px] font-mono text-xs bg-slate-50" /></div>)}
+                          </div>
+                      ))}
+
+                      <div className="grid grid-cols-2 sm:flex gap-2 justify-center pt-4 border-t border-slate-200 border-dashed mt-auto mb-6">
+                          <Button variant="outline" size="sm" onClick={() => addAnnounceBlock('text')}><AlignLeft className="w-4 h-4 mr-2"/> Teks</Button>
+                          <Button variant="outline" size="sm" onClick={() => addAnnounceBlock('list')}><List className="w-4 h-4 mr-2"/> List</Button>
+                          <Button variant="outline" size="sm" onClick={() => addAnnounceBlock('image')}><ImageIcon className="w-4 h-4 mr-2"/> Gambar</Button>
+                          <Button variant="outline" size="sm" onClick={() => addAnnounceBlock('table')}><Grid3X3 className="w-4 h-4 mr-2"/> Tabel</Button>
+                      </div>
+                  </div>
+              </div>
+              <DialogFooter className="px-6 py-4 border-t bg-white flex-col sm:flex-row gap-2 shrink-0">
+                  <Button variant="outline" onClick={() => setAnnouncementDialogOpen(false)}>Batal</Button>
+                  <Button onClick={handleSaveAnnouncement} disabled={isUploading} className="bg-red-600 hover:bg-red-700 text-white">Simpan Pengumuman</Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
+      
+      {/* ... (Previous Dialogs like Material, Program, Edit, Delete are assumed to be here, copied from previous code) ... */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
          <DialogContent className="max-w-[90vw] sm:max-w-sm rounded-2xl p-6">
             <DialogHeader className="flex flex-col items-center gap-2 text-center pb-2">
@@ -1050,7 +1205,7 @@ const AdminPage = () => {
                 )}
                 </div>
             </div>
-            <DialogFooter className="px-6 py-4 border-t bg-white flex flex-col-reverse sm:flex-row gap-2 shrink-0"><Button variant="outline" onClick={() => setDialogOpen(false)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleSave} disabled={isUploading} className="w-full sm:w-auto">Simpan</Button></DialogFooter>
+            <DialogFooter className="px-6 py-4 border-t bg-white flex-col sm:flex-row gap-2 shrink-0"><Button variant="outline" onClick={() => setDialogOpen(false)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleSave} disabled={isUploading} className="w-full sm:w-auto">Simpan</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1098,6 +1253,13 @@ const AdminPage = () => {
                         ))}
                         <Button variant="outline" size="sm" className="w-full text-xs mt-2" onClick={() => setMaterialForm({...materialForm, resources: [...materialForm.resources, {title: "", url: "", type: "web"}]})}><Plus className="w-3 h-3 mr-1"/> Tambah Link</Button>
                       </div>
+
+                      {/* UPDATE: INPUT TIPS DI MATERI EDITOR */}
+                      <div className="border-t pt-4 space-y-2">
+                           <Label className="text-xs font-bold text-yellow-600 flex items-center gap-1"><Lightbulb className="w-3 h-3"/> Tips Penting (Baris baru = Poin baru)</Label>
+                           <Textarea value={materialForm.tips} onChange={(e) => setMaterialForm({...materialForm, tips: e.target.value})} placeholder="Tips 1...&#10;Tips 2..." className="bg-yellow-50 border-yellow-200 text-xs min-h-[80px]" />
+                      </div>
+
                   </div>
                   
                   <div className="flex-1 bg-slate-50 p-4 md:p-6 flex flex-col gap-4">
@@ -1155,6 +1317,10 @@ const AdminPage = () => {
                    <div className="space-y-1"><Label>Gaji</Label><Input value={programForm.salary} onChange={e => setProgramForm({...programForm, salary: e.target.value})} placeholder="€1000/bulan"/></div>
                    <div className="space-y-1"><Label>Durasi</Label><Input value={programForm.duration} onChange={e => setProgramForm({...programForm, duration: e.target.value})} placeholder="3 Tahun"/></div>
                    <div className="space-y-1 md:col-span-2"><Label>Sumber Info</Label><Input value={programForm.source} onChange={e => setProgramForm({...programForm, source: e.target.value})} placeholder="Contoh: ausbildung.de"/></div>
+                   <div className="space-y-1 md:col-span-2">
+                       <Label className="text-yellow-600 font-bold flex items-center gap-1"><Lightbulb className="w-4 h-4" /> Tips Penting / Highlight</Label>
+                       <Textarea value={programForm.highlight} onChange={e => setProgramForm({...programForm, highlight: e.target.value})} placeholder="Tulis tips atau highlight penting di sini..." className="bg-yellow-50 border-yellow-200 text-slate-700 min-h-[80px]" />
+                   </div>
                 </div>
 
                 <div className="space-y-2 border-t pt-4">
