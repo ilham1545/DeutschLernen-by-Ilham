@@ -34,16 +34,48 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    // --- PERBAIKAN LOGIKA CEK SESI (Supaya User Terhapus Tidak Nyangkut) ---
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+      try {
+        // 1. Ambil session dari local storage browser
+        const { data: { session: localSession } } = await supabase.auth.getSession();
+
+        if (localSession) {
+          // 2. VERIFIKASI KE SERVER: Apakah user ini beneran masih ada di DB?
+          // getUser() memaksa request ke server Supabase, bukan cuma baca cache lokal.
+          const { data: { user: serverUser }, error } = await supabase.auth.getUser();
+
+          if (error || !serverUser) {
+            // 3. JIKA USER GAK ADA DI SERVER (misal sudah dihapus), PAKSA LOGOUT!
+            console.warn("User invalid/terhapus. Melakukan logout paksa.");
+            await supabase.auth.signOut();
+            setSession(null);
+            setUser(null);
+          } else {
+            // 4. Jika aman, sinkronkan state dengan data server
+            setSession(localSession);
+            setUser(serverUser);
+          }
+        } else {
+            // Tidak ada sesi sama sekali
+            setSession(null);
+            setUser(null);
+        }
+      } catch (err) {
+        console.error("Auth check error:", err);
+        setSession(null);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
     };
 
     checkSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Listener Realtime (Login/Logout/Token Refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      // Logic tambahan: jika ada event 'SIGNED_IN', kita bisa double check lagi kalau mau
+      // tapi biasanya onAuthStateChange sudah cukup akurat untuk event lokal.
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -117,8 +149,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     // C. Daftar Auth (Kirim Data via MetaData)
-    // Trigger di database akan menangkap data ini dan memasukkannya ke tabel 'profiles' otomatis.
-    // Jadi kita TIDAK PERLU insert manual lagi (yang bikin error RLS).
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -155,6 +185,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // --- 3. SIGN OUT ---
   const signOut = async () => {
     await supabase.auth.signOut();
+    setSession(null); // Explicitly clear state
+    setUser(null);
     toast({ title: "Keluar", description: "Anda telah logout." });
   };
 
@@ -238,7 +270,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     <AuthContext.Provider value={{ 
         session, user, signIn, signUp, signOut, updateProfile, deleteAccount, resetPassword, loading 
     }}>
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 };
