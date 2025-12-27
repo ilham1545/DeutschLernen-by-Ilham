@@ -6,12 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input"; // Tambah Input untuk link
+import { Textarea } from "@/components/ui/textarea"; // Tambah Textarea untuk note
 import {
   Calendar, CheckCircle2, Target, Clock,
   Youtube, ExternalLink, BookOpen, Coffee, GraduationCap,
   Headphones, FileText, Globe, RefreshCcw, Sparkles,
-  ChevronDown, ChevronUp, Info, PenTool, AlertTriangle
+  ChevronDown, ChevronUp, Info, PenTool, AlertTriangle, Circle
 } from "lucide-react";
 import {
   Accordion,
@@ -93,20 +94,20 @@ type WeekPlan = {
 const PlannerPage = () => {
   const { toast } = useToast();
   
-  // 2. State untuk Data Level dari DB
   const [levels, setLevels] = useState<Level[]>([]);
   const [loadingLevels, setLoadingLevels] = useState(true);
 
   const [selectedLevel, setSelectedLevel] = useState<string>("A1");
   const [durationMonths, setDurationMonths] = useState<number>(1);
   const [generatedPlan, setGeneratedPlan] = useState<WeekPlan[] | null>(null);
-  const [completedTasks, setCompletedTasks] = useState<Record<string, boolean>>({});
+  
+  // ADJUST: Menyimpan object { status, link, notes } per task ID
+  const [userProgress, setUserProgress] = useState<Record<string, { status: string; link: string; notes: string }>>({});
+  
   const [quote, setQuote] = useState(MOTIVATIONAL_QUOTES[0]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(true);
-  
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  // 3. Fetch Data Level
   useEffect(() => {
     const fetchLevels = async () => {
         setLoadingLevels(true);
@@ -119,42 +120,42 @@ const PlannerPage = () => {
 
   useEffect(() => {
     const savedPlan = localStorage.getItem("deutsch_planner_data");
-    const savedProgress = localStorage.getItem("deutsch_planner_progress");
+    const savedProgress = localStorage.getItem("deutsch_planner_user_progress"); 
     const savedLevel = localStorage.getItem("deutsch_planner_level");
     
     if (savedPlan) {
       setGeneratedPlan(JSON.parse(savedPlan));
       setIsSettingsOpen(false); 
     }
-    if (savedProgress) setCompletedTasks(JSON.parse(savedProgress));
+    if (savedProgress) setUserProgress(JSON.parse(savedProgress));
     if (savedLevel) setSelectedLevel(savedLevel);
 
     setQuote(MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)]);
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("deutsch_planner_progress", JSON.stringify(completedTasks));
-  }, [completedTasks]);
+    localStorage.setItem("deutsch_planner_user_progress", JSON.stringify(userProgress));
+  }, [userProgress]);
 
-  const toggleTask = (taskId: string) => {
-    setCompletedTasks(prev => {
-      const newState = { ...prev, [taskId]: !prev[taskId] };
-      if (newState[taskId]) {
-        toast({ title: "Selesai! ✅", description: "Progress tersimpan.", duration: 1000 });
-      }
-      return newState;
-    });
+  // ADJUST: Helper untuk update data (Status/Link/Note)
+  const updateTaskData = (taskId: string, field: "status" | "link" | "notes", value: string) => {
+    setUserProgress(prev => ({
+        ...prev,
+        [taskId]: {
+            ...(prev[taskId] || { status: "not_started", link: "", notes: "" }),
+            [field]: value
+        }
+    }));
   };
 
   const calculateProgress = () => {
     if (!generatedPlan) return 0;
     const totalTasks = generatedPlan.reduce((acc, week) => acc + week.days.length, 0);
-    const finishedTasks = Object.values(completedTasks).filter(Boolean).length;
+    const finishedTasks = Object.values(userProgress).filter(p => p.status === "done").length;
     return totalTasks === 0 ? 0 : Math.round((finishedTasks / totalTasks) * 100);
   };
 
   const generatePlan = () => {
-    // 4. Gunakan state 'levels' bukan import lama
     const levelData = levels.find((l) => l.id === selectedLevel);
     
     if (!levelData) {
@@ -203,14 +204,14 @@ const PlannerPage = () => {
     }
 
     setGeneratedPlan(plan);
-    setCompletedTasks({});
+    setUserProgress({});
     localStorage.setItem("deutsch_planner_data", JSON.stringify(plan));
     localStorage.setItem("deutsch_planner_level", selectedLevel);
     setIsSettingsOpen(false);
     toast({ title: "Plan Siap!", description: "Selamat belajar!" });
   };
 
-  // --- STYLE UNTUK CHIP WARNA (LUCU) ---
+  // --- STYLE HELPER BARU ---
   const getTaskStyle = (type: string) => {
     switch (type) {
       case "learn": return "bg-blue-100 text-blue-800 border-blue-200";
@@ -239,15 +240,23 @@ const PlannerPage = () => {
     }
   };
 
+  const getStatusColor = (status: string) => {
+      switch(status) {
+          case "done": return "bg-green-100 text-green-700 border-green-200";
+          case "in_progress": return "bg-blue-100 text-blue-700 border-blue-200";
+          default: return "bg-white border-slate-200 text-slate-500";
+      }
+  };
+
   const handleResetClick = () => {
     setShowResetConfirm(true);
   };
 
   const confirmReset = () => {
     setGeneratedPlan(null);
-    setCompletedTasks({});
+    setUserProgress({});
     localStorage.removeItem("deutsch_planner_data");
-    localStorage.removeItem("deutsch_planner_progress");
+    localStorage.removeItem("deutsch_planner_user_progress");
     setIsSettingsOpen(true);
     setShowResetConfirm(false);
     toast({ title: "Reset Berhasil 🗑️", description: "Silakan buat rencana baru.", duration: 2000 });
@@ -390,30 +399,38 @@ const PlannerPage = () => {
                     </AccordionTrigger>
                     <AccordionContent className="p-0 border-t-2 border-foreground/10 bg-slate-50/50">
                       <div className="divide-y divide-dashed divide-foreground/20">
-                        {weekItem.days.map((task, dayIdx) => (
-                          <div key={task.id} className={cn("flex flex-col sm:flex-row gap-4 p-5 transition-colors", completedTasks[task.id] ? "bg-green-50" : "")}>
-                            
-                            {/* Checkbox Area */}
-                            <div className="shrink-0 pt-1 flex sm:block items-center gap-3">
-                              <Checkbox 
-                                id={task.id}
-                                checked={completedTasks[task.id] || false}
-                                onCheckedChange={() => toggleTask(task.id)}
-                                className="w-6 h-6 border-2 border-foreground data-[state=checked]:bg-green-500 data-[state=checked]:border-green-600"
-                              />
-                              <span className="text-xs font-bold text-muted-foreground uppercase sm:hidden">Hari {dayIdx+1}</span>
-                            </div>
+                        {weekItem.days.map((task, dayIdx) => {
+                          const currentProgress = userProgress[task.id] || { status: "not_started", link: "", notes: "" };
+                          return (
+                            <div key={task.id} className={cn("flex flex-col sm:flex-row gap-4 p-5 transition-colors", currentProgress.status === "done" ? "bg-green-50" : "")}>
+                              
+                              {/* ADJUST: Ganti Checkbox dengan Dropdown Status */}
+                              <div className="shrink-0 pt-1 flex sm:flex-col items-start gap-2 sm:w-32">
+                                <span className="text-xs font-bold text-muted-foreground uppercase">Hari {dayIdx+1}</span>
+                                <Select 
+                                    value={currentProgress.status} 
+                                    onValueChange={(val: any) => updateTaskData(task.id, "status", val)}
+                                >
+                                    <SelectTrigger className={cn("h-8 text-xs font-bold border-2 transition-colors w-full", getStatusColor(currentProgress.status))}>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="not_started"><div className="flex items-center"><Circle className="w-3 h-3 mr-2"/> Belum</div></SelectItem>
+                                        <SelectItem value="in_progress"><div className="flex items-center"><Clock className="w-3 h-3 mr-2"/> Proses</div></SelectItem>
+                                        <SelectItem value="done"><div className="flex items-center"><CheckCircle2 className="w-3 h-3 mr-2"/> Selesai</div></SelectItem>
+                                    </SelectContent>
+                                </Select>
+                              </div>
 
-                            {/* Detail Tugas */}
-                            <div className="flex-1">
-                              <div className="flex flex-col sm:flex-row sm:justify-between gap-2">
+                              {/* Detail Tugas */}
+                              <div className="flex-1 space-y-3">
                                 <div className="space-y-1">
-                                  <label htmlFor={task.id} className={cn("font-bold text-lg cursor-pointer block", completedTasks[task.id] && "line-through text-muted-foreground")}>
+                                  <label className={cn("font-bold text-lg block", currentProgress.status === "done" && "line-through text-muted-foreground")}>
                                     {task.title}
                                   </label>
                                   
-                                  {/* --- CHIP WARNA-WARNI LUCU --- */}
-                                  <div className="flex flex-wrap gap-2 items-center mt-1">
+                                  {/* Chips Info */}
+                                  <div className="flex flex-wrap gap-2 items-center">
                                     <span className={cn("text-xs font-bold px-2 py-0.5 rounded border border-black/10 flex items-center gap-1 uppercase tracking-wide", getTaskStyle(task.type))}>
                                       {getTaskIcon(task.type)} {task.type}
                                     </span>
@@ -422,26 +439,42 @@ const PlannerPage = () => {
                                     </span>
                                   </div>
 
-                                  {/* Instruksi Deep Dive */}
-                                  {task.detail && !completedTasks[task.id] && (
+                                  {/* Detail Materi */}
+                                  {task.detail && (
                                     <p className="text-sm text-slate-600 mt-2 p-2 bg-white rounded border border-slate-200 flex gap-2">
                                       <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                                       {task.detail}
                                     </p>
                                   )}
 
-                                  {/* External Link */}
+                                  {/* External Link Asli */}
                                   {task.link && (
                                     <a href={task.link} target="_blank" className="mt-2 text-xs font-bold text-blue-600 hover:underline inline-flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded border border-blue-200 transition-transform hover:scale-105">
                                       <ExternalLink className="w-3 h-3"/> Buka Materi: {task.linkDesc}
                                     </a>
                                   )}
                                 </div>
-                              </div>
-                            </div>
 
-                          </div>
-                        ))}
+                                {/* ADJUST: AREA INPUT TAMBAHAN (Spreadsheet-like) */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-dashed border-slate-200">
+                                    <Input 
+                                        placeholder="Paste link sumber tambahan..." 
+                                        className="h-8 text-xs bg-white border-slate-200 focus:border-black"
+                                        value={currentProgress.link}
+                                        onChange={(e) => updateTaskData(task.id, "link", e.target.value)}
+                                    />
+                                    <Textarea 
+                                        placeholder="Catatan pribadi..." 
+                                        className="min-h-[32px] h-8 text-xs py-1.5 resize-none bg-white border-slate-200 focus:border-black transition-all focus:min-h-[60px]"
+                                        value={currentProgress.notes}
+                                        onChange={(e) => updateTaskData(task.id, "notes", e.target.value)}
+                                    />
+                                </div>
+                              </div>
+
+                            </div>
+                          );
+                        })}
                       </div>
                     </AccordionContent>
                   </AccordionItem>
