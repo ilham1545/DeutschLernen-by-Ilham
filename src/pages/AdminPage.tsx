@@ -1325,10 +1325,6 @@ const AdminPage = () => {
                    <div className="space-y-1"><Label>Gaji</Label><Input value={programForm.salary} onChange={e => setProgramForm({...programForm, salary: e.target.value})} placeholder="€1000/bulan"/></div>
                    <div className="space-y-1"><Label>Durasi</Label><Input value={programForm.duration} onChange={e => setProgramForm({...programForm, duration: e.target.value})} placeholder="3 Tahun"/></div>
                    <div className="space-y-1 md:col-span-2"><Label>Sumber Info</Label><Input value={programForm.source} onChange={e => setProgramForm({...programForm, source: e.target.value})} placeholder="Contoh: ausbildung.de"/></div>
-                   <div className="space-y-1 md:col-span-2">
-                       <Label className="text-yellow-600 font-bold flex items-center gap-1"><Lightbulb className="w-4 h-4" /> Tips Penting / Highlight</Label>
-                       <Textarea value={programForm.highlight} onChange={e => setProgramForm({...programForm, highlight: e.target.value})} placeholder="Tulis tips atau highlight penting di sini..." className="bg-yellow-50 border-yellow-200 text-slate-700 min-h-[80px]" />
-                   </div>
                 </div>
 
                 <div className="space-y-2 border-t pt-4">
