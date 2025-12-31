@@ -1,24 +1,47 @@
 import { useState } from "react";
 import { Check, ChevronDown, ChevronUp, BookOpen, MessageSquare, PenTool, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SubSection } from "@/data/lessons";
+// Hapus import interface SubSection dari data/lessons jika bikin konflik, kita pakai any dulu biar aman
 import { saveProgress, isSubSectionComplete } from "@/utils/progress";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
 interface LessonCardProps {
   levelId: string;
-  subSection: SubSection;
+  subSection: any; // Ganti ke any biar fleksibel nerima data dari Supabase
   onProgressUpdate: () => void;
 }
 
 const LessonCard = ({ levelId, subSection, onProgressUpdate }: LessonCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<"vocabulary" | "grammar" | "dialog" | "exercise">("vocabulary");
+  const [activeTab, setActiveTab] = useState<"vocabulary" | "dialog" | "exercise">("vocabulary");
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
   const [showResults, setShowResults] = useState(false);
+  
   const isComplete = isSubSectionComplete(levelId, subSection.id);
   const { toast } = useToast();
+
+  // --- 🛡️ DATA SANITIZER (BAGIAN INI YANG MEMPERBAIKI ERROR) 🛡️ ---
+  // Kita pastikan data selalu berupa Array, walau dari database null/undefined/string
+  
+  const safeVocabs = Array.isArray(subSection.vocabulary) 
+    ? subSection.vocabulary 
+    : (subSection.vocabularies || []);
+
+  const safeDialogs = Array.isArray(subSection.dialogs) 
+    ? subSection.dialogs 
+    : [];
+
+  const safeExercises = Array.isArray(subSection.exercises) 
+    ? subSection.exercises.map((ex: any) => ({
+        ...ex,
+        // Cek: kalau options bentuknya string, kita parse jadi JSON. Kalau array, biarin.
+        options: typeof ex.options === "string" ? JSON.parse(ex.options) : (ex.options || []),
+        // Pastikan correctAnswer berupa angka
+        correctAnswer: Number(ex.correct_answer || ex.correctAnswer || 0) 
+      }))
+    : [];
+  // ------------------------------------------------------------------
 
   const handleMarkComplete = () => {
     saveProgress(levelId, subSection.id);
@@ -39,7 +62,7 @@ const LessonCard = ({ levelId, subSection, onProgressUpdate }: LessonCardProps) 
 
   const getScore = () => {
     let correct = 0;
-    subSection.exercises.forEach((exercise, index) => {
+    safeExercises.forEach((exercise: any, index: number) => {
       if (selectedAnswers[index] === exercise.correctAnswer) {
         correct++;
       }
@@ -49,7 +72,6 @@ const LessonCard = ({ levelId, subSection, onProgressUpdate }: LessonCardProps) 
 
   const tabs = [
     { id: "vocabulary", label: "Kosakata", icon: BookOpen },
-    { id: "grammar", label: "Grammar", icon: PenTool },
     { id: "dialog", label: "Dialog", icon: MessageSquare },
     { id: "exercise", label: "Latihan", icon: Volume2 },
   ] as const;
@@ -74,7 +96,7 @@ const LessonCard = ({ levelId, subSection, onProgressUpdate }: LessonCardProps) 
           <div>
             <h3 className="font-bold text-lg">{subSection.title}</h3>
             <p className="text-sm text-muted-foreground">
-              {subSection.vocabulary.length} kata • {subSection.exercises.length} latihan
+              {safeVocabs.length} kata • {safeExercises.length} latihan
             </p>
           </div>
         </div>
@@ -108,9 +130,12 @@ const LessonCard = ({ levelId, subSection, onProgressUpdate }: LessonCardProps) 
 
           {/* Tab Content */}
           <div className="p-6">
+            
+            {/* --- VOCABULARY TAB --- */}
             {activeTab === "vocabulary" && (
               <div className="grid gap-3">
-                {subSection.vocabulary.map((vocab, index) => (
+                {safeVocabs.length === 0 && <p className="text-slate-400 italic">Belum ada kosakata.</p>}
+                {safeVocabs.map((vocab: any, index: number) => (
                   <div
                     key={index}
                     className="border-2 border-foreground p-4 bg-background hover:bg-accent transition-colors"
@@ -128,34 +153,17 @@ const LessonCard = ({ levelId, subSection, onProgressUpdate }: LessonCardProps) 
               </div>
             )}
 
-            {activeTab === "grammar" && (
-              <div className="space-y-6">
-                {subSection.grammar.map((gram, index) => (
-                  <div key={index} className="border-2 border-foreground p-4">
-                    <h4 className="font-bold text-lg mb-2">{gram.title}</h4>
-                    <p className="text-muted-foreground mb-4">{gram.explanation}</p>
-                    <div className="bg-accent p-4 border-2 border-foreground">
-                      <p className="font-medium mb-2">Contoh:</p>
-                      <ul className="space-y-1">
-                        {gram.examples.map((ex, i) => (
-                          <li key={i} className="text-sm">• {ex}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
+            {/* --- DIALOG TAB --- */}
             {activeTab === "dialog" && (
               <div className="space-y-6">
-                {subSection.dialogs.map((dialog, index) => (
+                {safeDialogs.length === 0 && <p className="text-slate-400 italic">Belum ada dialog.</p>}
+                {safeDialogs.map((dialog: any, index: number) => (
                   <div key={index} className="border-2 border-foreground p-4">
                     <h4 className="font-bold text-lg mb-4 bg-foreground text-background px-3 py-1 inline-block">
                       {dialog.title}
                     </h4>
                     <div className="space-y-3">
-                      {dialog.lines.map((line, i) => (
+                      {(dialog.dialog_lines || dialog.lines || []).map((line: any, i: number) => (
                         <div key={i} className="border-l-4 border-foreground pl-4">
                           <p className="font-bold text-sm">{line.speaker}:</p>
                           <p className="font-medium">{line.german}</p>
@@ -168,15 +176,18 @@ const LessonCard = ({ levelId, subSection, onProgressUpdate }: LessonCardProps) 
               </div>
             )}
 
+            {/* --- EXERCISE TAB --- */}
             {activeTab === "exercise" && (
               <div className="space-y-6">
-                {subSection.exercises.map((exercise, qIndex) => (
+                {safeExercises.length === 0 && <p className="text-slate-400 italic">Belum ada latihan.</p>}
+                {safeExercises.map((exercise: any, qIndex: number) => (
                   <div key={qIndex} className="border-2 border-foreground p-4">
                     <p className="font-bold mb-4">
                       {qIndex + 1}. {exercise.question}
                     </p>
                     <div className="grid gap-2">
-                      {exercise.options.map((option, oIndex) => {
+                      {/* Sekarang aman untuk di-map karena sudah dibersihkan di safeExercises */}
+                      {exercise.options.map((option: string, oIndex: number) => {
                         const isSelected = selectedAnswers[qIndex] === oIndex;
                         const isCorrect = exercise.correctAnswer === oIndex;
                         const showCorrectness = showResults && isSelected;
@@ -189,7 +200,7 @@ const LessonCard = ({ levelId, subSection, onProgressUpdate }: LessonCardProps) 
                             className={cn(
                               "text-left px-4 py-3 border-2 border-foreground transition-all",
                               isSelected && !showResults && "bg-accent",
-                              showCorrectness && isCorrect && "bg-foreground text-background",
+                              showResults && isCorrect && "bg-foreground text-background",
                               showCorrectness && !isCorrect && "bg-destructive text-destructive-foreground",
                               showResults && isCorrect && !isSelected && "border-dashed"
                             )}
@@ -207,7 +218,7 @@ const LessonCard = ({ levelId, subSection, onProgressUpdate }: LessonCardProps) 
                   {!showResults ? (
                     <Button
                       onClick={checkAnswers}
-                      disabled={Object.keys(selectedAnswers).length !== subSection.exercises.length}
+                      disabled={safeExercises.length === 0 || Object.keys(selectedAnswers).length !== safeExercises.length}
                       className="w-full sm:w-auto"
                     >
                       Periksa Jawaban
@@ -215,7 +226,7 @@ const LessonCard = ({ levelId, subSection, onProgressUpdate }: LessonCardProps) 
                   ) : (
                     <div className="flex items-center gap-4">
                       <span className="font-bold text-lg">
-                        Skor: {getScore()}/{subSection.exercises.length}
+                        Skor: {getScore()}/{safeExercises.length}
                       </span>
                       <Button
                         variant="outline"

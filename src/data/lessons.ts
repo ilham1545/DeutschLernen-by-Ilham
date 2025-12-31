@@ -7,12 +7,6 @@ export interface Vocabulary {
   example: string;
 }
 
-export interface Grammar {
-  title: string;
-  explanation: string;
-  examples: string[];
-}
-
 export interface Dialog {
   title: string;
   lines: { speaker: string; german: string; indonesian: string }[];
@@ -28,7 +22,6 @@ export interface SubSection {
   id: string;
   title: string;
   vocabulary: Vocabulary[];
-  grammar: Grammar[];
   dialogs: Dialog[];
   exercises: Exercise[];
 }
@@ -60,7 +53,6 @@ export const getLevelsFromDB = async (): Promise<Level[]> => {
       .select(`
         *,
         vocabularies(*),
-        grammars(*),
         dialogs(*),
         exercises(*)
       `)
@@ -77,21 +69,16 @@ export const getLevelsFromDB = async (): Promise<Level[]> => {
       const subSections: SubSection[] = relevantLessons.map((lesson: any) => ({
         id: lesson.slug,
         title: lesson.title,
-        vocabulary: lesson.vocabularies.map((v: any) => ({
+        vocabulary: lesson.vocabularies?.map((v: any) => ({
           german: v.german,
           indonesian: v.indonesian,
           example: v.example || "",
         })),
-        grammar: lesson.grammars.map((g: any) => ({
-          title: g.title,
-          explanation: g.explanation,
-          examples: g.examples || [],
-        })),
-        dialogs: lesson.dialogs.map((d: any) => ({
+        dialogs: lesson.dialogs?.map((d: any) => ({
           title: d.title,
           lines: d.lines, // JSONB dari DB
         })),
-        exercises: lesson.exercises.map((e: any) => ({
+        exercises: lesson.exercises?.map((e: any) => ({
           question: e.question,
           options: e.options,
           correctAnswer: e.correct_answer, // Perhatikan snake_case dari DB

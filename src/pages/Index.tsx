@@ -117,7 +117,7 @@ const Index = () => {
                 <h3 className="text-2xl font-bold mb-2">{level.title}</h3>
                 <p className="text-muted-foreground text-sm mb-6 leading-relaxed">{level.description}</p>
                 <div className="flex items-center text-sm font-bold group-hover:underline decoration-2 underline-offset-4">
-                  {level.subSections.length} Bab Materi
+                  {level.subSections.length} Kategori Kosakata Tersedia
                   <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" size={16} />
                 </div>
               </Link>
