@@ -304,7 +304,7 @@ const Index = () => {
                 Dan terima kasih khusus untuk kamu yang sudah mampir!
              </p>
               <Button asChild className="w-full rounded-2xl h-12 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white shadow-pink-500/20 border-0 font-bold">
-                <a href="https://ko-fi.com/ilhamramdhani" target="_blank" rel="noopener noreferrer">
+                <a href="https://sociabuzz.com/ilhamramdhani/tribe" target="_blank" rel="noopener noreferrer">
                   <Coffee className="w-4 h-4 mr-2"/> 
                   Traktir Saya Kopi
                 </a>

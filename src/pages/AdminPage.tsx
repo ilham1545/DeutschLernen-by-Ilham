@@ -1091,6 +1091,64 @@ const AdminPage = () => {
                           </div>
                       </div>
                   )}
+
+                  {/* ANNOUNCEMENT MANAGER */}
+                  {activeMenu === "announcement" && (
+                    <div className="space-y-6 animate-in fade-in duration-300">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <h2 className="text-2xl font-bold text-slate-900">Pengumuman System</h2>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {/* Tombol Tambah */}
+                        <button onClick={() => openAnnouncementDialog(null)} className="h-auto min-h-[200px] rounded-xl border-2 border-dashed border-slate-300 hover:border-red-500 hover:bg-red-50 transition-all flex flex-col items-center justify-center text-slate-400 hover:text-red-600 gap-3 group bg-slate-50/50">
+                          <div className="p-4 bg-white shadow-sm border border-slate-200 rounded-full group-hover:scale-110 transition-transform"><Plus className="w-6 h-6"/></div>
+                          <span className="font-bold text-sm">Buat Pengumuman</span>
+                        </button>
+
+                        {/* List Pengumuman */}
+                        {announcements.map((ann) => (
+                          <div key={ann.id} className="bg-white border rounded-xl p-5 hover:shadow-lg transition-all group flex flex-col h-full min-h-[200px] relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                              <Megaphone className="w-24 h-24 text-red-600 -rotate-12" />
+                            </div>
+                            
+                            <div className="flex justify-between items-start mb-3 relative z-10">
+                              <div className="flex gap-2">
+                                <span className={cn("px-2 py-1 text-[10px] font-bold rounded border uppercase flex items-center gap-1", ann.type === 'popup' ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
+                                  {ann.type === 'popup' ? <BellRing className="w-3 h-3"/> : <MoveHorizontal className="w-3 h-3"/>}
+                                  {ann.type}
+                                </span>
+                                <span className={cn("px-2 py-1 text-[10px] font-bold rounded border uppercase flex items-center gap-1", ann.is_active ? "bg-green-50 text-green-700 border-green-200" : "bg-slate-100 text-slate-500 border-slate-200")}>
+                                  {ann.is_active ? <CheckCircle2 className="w-3 h-3"/> : <LogOut className="w-3 h-3"/>}
+                                  {ann.is_active ? "Aktif" : "Non-Aktif"}
+                                </span>
+                              </div>
+                            </div>
+
+                            <h3 className="font-bold text-lg leading-snug mb-2 text-slate-800 group-hover:text-red-600 transition-colors relative z-10 line-clamp-2">{ann.title}</h3>
+                            
+                            <div className="text-xs text-slate-500 mb-4 flex-grow relative z-10">
+                              {Array.isArray(ann.content) && ann.content.length > 0 
+                                ? `${ann.content.length} Blok Konten` 
+                                : "Tidak ada konten"}
+                              <br/>
+                              <span className="text-[10px] text-slate-400">ID: {ann.id.substring(0,8)}...</span>
+                            </div>
+
+                            <div className="mt-auto flex gap-2 pt-4 border-t border-slate-50 relative z-10">
+                              <Button onClick={() => openAnnouncementDialog(ann)} variant="outline" size="sm" className="flex-1 h-9 text-xs font-bold border-slate-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600">
+                                <Edit2 className="w-3 h-3 mr-2"/> Edit
+                              </Button>
+                              <Button onClick={() => confirmDelete(ann, "announcement")} variant="ghost" size="sm" className="h-9 w-9 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50">
+                                <Trash2 className="w-4 h-4"/>
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
               </div>
           </div>
       </main>

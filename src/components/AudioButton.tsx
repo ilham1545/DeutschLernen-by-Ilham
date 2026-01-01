@@ -1,54 +1,77 @@
 import { Volume2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
+// Kita tambahkan prop 'lang' opsional
 interface AudioButtonProps {
   text: string;
+  lang?: "de-DE" | "id-ID" | "en-US"; // Default nanti de-DE
   className?: string;
 }
 
-const AudioButton = ({ text, className }: AudioButtonProps) => {
+const AudioButton = ({ text, lang = "de-DE", className }: AudioButtonProps) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
 
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
   const playAudio = (e: React.MouseEvent) => {
-    e.stopPropagation(); 
-    
+    e.stopPropagation();
+
     if (!window.speechSynthesis) {
-      alert("Browser kamu tidak mendukung fitur suara :(");
+      console.warn("Browser tidak support TTS");
       return;
     }
 
     window.speechSynthesis.cancel();
 
-    // --- LOGIKA PEMBERSIH TEKS (DIPERBAIKI) ---
+    // 1. BERSIHKAN TEKS
     let cleanText = text;
-
-    // 1. Hapus Markdown (**bold**, *italic*)
-    cleanText = cleanText.replace(/[*_#\[\]]/g, "");
-
-    // 2. Hapus teks dalam kurung (...) beserta isinya
-    // Contoh: "Schön (Syoen)" -> "Schön"
-    // Contoh: "Ä (ä)" -> "Ä"
-    cleanText = cleanText.replace(/\s*\(.*?\)\s*/g, "");
-
-    // 3. Hapus tanda kutip atau simbol aneh lain yang tersisa
+    cleanText = cleanText.replace(/[*_#\[\]]/g, ""); 
+    cleanText = cleanText.replace(/\s*\(.*?\)\s*/g, ""); 
     cleanText = cleanText.replace(/['"]/g, "");
-
-    // 4. Trim spasi berlebih
     cleanText = cleanText.trim();
 
-    // PENTING: Jika setelah dibersihkan teksnya kosong (misal cuma simbol), jangan dibaca
     if (!cleanText) return;
 
-    // --- KONFIGURASI SUARA ---
+    // 2. LOGIKA CARI SUARA SESUAI BAHASA
+    const voices = window.speechSynthesis.getVoices();
+    let selectedVoice = null;
+
+    if (lang === "id-ID") {
+      // --- LOGIKA INDONESIA ---
+      // Cari suara Google Bahasa Indonesia dulu (paling natural), baru fallback ke apapun yang 'id'
+      selectedVoice = 
+        voices.find(v => v.lang === "id-ID" && v.name.includes("Google")) || 
+        voices.find(v => v.lang.includes("id-ID") || v.lang.includes("ind"));
+        
+    } else if (lang === "en-US") {
+      // --- LOGIKA INGGRIS ---
+      selectedVoice = 
+        voices.find(v => v.lang === "en-US" && v.name.includes("Google")) || 
+        voices.find(v => v.lang.startsWith("en-"));
+
+    } else {
+      // --- LOGIKA JERMAN (DEFAULT) ---
+      selectedVoice = 
+        voices.find(v => v.lang === "de-DE" && v.name.includes("Google")) || 
+        voices.find(v => v.lang === "de-DE" && v.name.includes("Microsoft")) || 
+        voices.find(v => v.lang.startsWith("de"));
+    }
+
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = "de-DE"; // Paksa bahasa Jerman
     
-    // Tweak kecepatan biar satu huruf gak kedengeran aneh
-    // Kalau teks pendek (1-2 huruf), speed normal (1.0) biar gak 'ngeret'
-    // Kalau teks panjang, agak lambat (0.8) biar jelas
-    utterance.rate = cleanText.length <= 3 ? 1.0 : 0.8; 
-    
-    utterance.pitch = 1;
+    // Set Bahasa & Suara
+    utterance.lang = lang; 
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
+
+    // Tweak Kecepatan (Indo biasanya perlu agak lambat biar gak ngebut kayak kereta)
+    utterance.rate = lang === "id-ID" ? 0.85 : 0.9; 
+    utterance.pitch = 1.0;
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
@@ -60,14 +83,14 @@ const AudioButton = ({ text, className }: AudioButtonProps) => {
   return (
     <button
       onClick={playAudio}
-      className={`inline-flex items-center justify-center p-1.5 rounded-full transition-all hover:scale-110 active:scale-95 shrink-0 ${
+      className={`inline-flex items-center justify-center p-2 rounded-full transition-all shrink-0 ${
         isSpeaking 
-          ? "bg-green-100 text-green-600 animate-pulse" 
-          : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+          ? "bg-green-100 text-green-600 scale-110 ring-2 ring-green-200" 
+          : "bg-blue-50 text-blue-600 hover:bg-blue-100 hover:scale-105 active:scale-95"
       } ${className}`}
-      title="Dengar Pengucapan"
+      title={`Dengar (${lang === "id-ID" ? "Indonesia" : lang === "en-US" ? "Inggris" : "Jerman"})`}
     >
-      <Volume2 size={16} className={isSpeaking ? "fill-current" : ""} />
+      <Volume2 size={18} className={isSpeaking ? "fill-current animate-pulse" : ""} />
     </button>
   );
 };
