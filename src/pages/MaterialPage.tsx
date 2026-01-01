@@ -6,9 +6,8 @@ import { ArrowLeft, BookOpen, Lightbulb, ExternalLink, FileText, Youtube, Headph
 import { cn } from "@/lib/utils";
 import AudioButton from "@/components/AudioButton";
 
-// Import Fetcher Database (PENTING!)
+// Import Fetcher Database
 import { getCourseMaterialsFromDB, CourseMaterial, ContentBlock } from "@/data/course_materials";
-// Kita asumsikan examMaterials masih hardcode untuk sementara (atau bisa dimigrasi juga nanti)
 import { examMaterials } from "@/data/exam_materials"; 
 
 const MaterialPage = () => {
@@ -73,8 +72,10 @@ const MaterialPage = () => {
     });
   };
 
-  // Fungsi Render Blok Konten
+  // Fungsi Render Blok Konten (Updated: Support Image & Table & Text)
   const renderContent = (block: ContentBlock, idx: number) => {
+    
+    // 1. Render TEKS
     if (block.type === "text") {
       return (
         <div key={idx} className="text-lg leading-relaxed mb-6 whitespace-pre-wrap font-medium text-foreground/80">
@@ -82,6 +83,31 @@ const MaterialPage = () => {
         </div>
       );
     } 
+    
+    // 2. Render GAMBAR (Fixed TypeScript Error)
+    if (block.type === "image") {
+        // TypeScript sekarang tau kalau type="image", maka properti src & alt PASTI ADA (berkat Langkah 1)
+        return (
+          <div key={idx} className="my-8 flex flex-col items-center">
+            <div className="relative w-full max-w-3xl rounded-xl overflow-hidden border-4 border-foreground shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white">
+              <img 
+                src={block.src} 
+                alt={block.alt || "Ilustrasi Materi"} 
+                className="w-full h-auto object-contain max-h-[500px]"
+                loading="lazy"
+                onError={(e) => (e.currentTarget.style.display = 'none')} 
+              />
+            </div>
+            {block.alt && (
+              <p className="mt-3 text-sm font-bold text-muted-foreground italic text-center bg-yellow-50 px-4 py-1 rounded-full border border-yellow-200">
+                📸 {block.alt}
+              </p>
+            )}
+          </div>
+        );
+    }
+
+    // 3. Render TABEL
     if (block.type === "table") {
       return (
         <div key={idx} className="overflow-x-auto mb-8 border-4 border-foreground rounded-lg shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -115,6 +141,8 @@ const MaterialPage = () => {
         </div>
       );
     }
+    
+    return null; // Fallback jika tipe tidak dikenali
   };
 
   // --- TAMPILAN LOADING ---
