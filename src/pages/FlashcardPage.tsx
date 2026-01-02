@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 // Import Icon lengkap
-import { ChevronLeft, ChevronRight, Shuffle, RotateCcw, List, Layers, Trash2, Volume2, Loader2 } from "lucide-react";
-// PENTING: Import Tipe Data saja, JANGAN import 'levels' atau 'getFlashcardsForLevel' dari file lama
+import { ChevronLeft, ChevronRight, Shuffle, RotateCcw, List, Layers, Trash2, Volume2, Loader2, Check, Bookmark } from "lucide-react";
+// PENTING: Import Tipe Data saja
 import { Vocabulary } from "@/data/lessons"; 
 import { saveLastCardPosition, loadLastCardPosition } from "@/utils/progress";
 import FlashCard from "@/components/FlashCard";
@@ -11,35 +11,41 @@ import { useDictionary } from "@/hooks/useDictionary";
 // Import Card component untuk tampilan List
 import { Card, CardContent } from "@/components/ui/card";
 import { useActivityLog } from "@/hooks/useActivityLog";
-// Import Supabase
+// Import Supabase & Toast
 import { supabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
-// Daftar Level (Kita hardcode untuk tombol navigasi aja, biar cepet render)
+// Daftar Level
 const AVAILABLE_LEVELS = ["A1", "A2", "B1", "B2"];
 
 const FlashcardPage = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [selectedLevel, setSelectedLevel] = useState<string>("A1");
   const [currentIndex, setCurrentIdx] = useState(0);
   const [flashcards, setFlashcards] = useState<Vocabulary[]>([]);
   const [isShuffled, setIsShuffled] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); // Tambahan state loading
+  const [isLoading, setIsLoading] = useState(false);
 
   // State Mode Tampilan
   const [viewMode, setViewMode] = useState<"deck" | "list">("deck");
 
-  // Panggil Hook Dictionary
+  // Panggil Hook Dictionary (Untuk Bookmark)
   const { saveWord, isSaved, words, removeWord } = useDictionary();
   const { logActivity } = useActivityLog();
 
-  // Filter kata disimpan per Level
+  // State lokal untuk melacak kata yang "Sudah Tahu" di sesi ini (biar UI responsif)
+  const [knownWordsSet, setKnownWordsSet] = useState<Set<string>>(new Set());
+
+  // Filter kata BOOKMARK per Level (bukan known words)
   const savedWordsForLevel = words.filter(w => w.source === `Flashcard ${selectedLevel}`);
 
-  // --- 1. FETCH DATA DARI DATABASE (Gantikan getFlashcardsForLevel) ---
+  // --- 1. FETCH DATA DARI DATABASE ---
   useEffect(() => {
     const fetchVocabularies = async () => {
       setIsLoading(true);
       try {
-        // Query ke Supabase: Ambil vocab yang lesson-nya punya level_id sesuai
         const { data, error } = await supabase
           .from("vocabularies")
           .select(`
@@ -55,7 +61,6 @@ const FlashcardPage = () => {
         if (error) throw error;
 
         if (data) {
-          // Format data dari DB ke tipe Vocabulary
           const vocabList: Vocabulary[] = data.map((item: any) => ({
             german: item.german,
             indonesian: item.indonesian,
@@ -64,13 +69,25 @@ const FlashcardPage = () => {
 
           setFlashcards(vocabList);
 
-          // Load posisi terakhir (hanya di mode deck)
+          // Load posisi terakhir
           if (viewMode === "deck") {
             const savedIndex = loadLastCardPosition(selectedLevel);
-            // Validasi index biar gak error kalau datanya berubah
             setCurrentIdx(Math.min(savedIndex, Math.max(0, vocabList.length - 1)));
           }
         }
+        
+        // Load Known Words user untuk level ini (biar tombol ceklis nyala kalau udah tau)
+        if (user) {
+            const { data: knownData } = await supabase
+                .from('user_known_words')
+                .select('german')
+                .eq('user_id', user.id);
+            
+            if (knownData) {
+                setKnownWordsSet(new Set(knownData.map(k => k.german)));
+            }
+        }
+
       } catch (err) {
         console.error("Gagal mengambil flashcard:", err);
       } finally {
@@ -80,7 +97,7 @@ const FlashcardPage = () => {
     };
 
     fetchVocabularies();
-  }, [selectedLevel]); // Jalankan ulang kalau user ganti level
+  }, [selectedLevel, user]); 
 
   // Simpan posisi terakhir
   useEffect(() => {
@@ -118,7 +135,6 @@ const FlashcardPage = () => {
 
   const resetOrder = async () => {
     setIsLoading(true);
-    // Fetch ulang biar urutan balik ke awal database (cara paling bersih)
     const { data } = await supabase
         .from("vocabularies")
         .select("german, indonesian, example, lessons!inner(level_id)")
@@ -137,7 +153,7 @@ const FlashcardPage = () => {
     setIsLoading(false);
   };
 
-  // --- LOGIKA BOOKMARK ---
+  // --- LOGIKA BOOKMARK (Simpan ke saved_words) ---
   const handleBookmark = () => {
     const currentCard = flashcards[currentIndex]; 
     if (currentCard) {
@@ -151,6 +167,47 @@ const FlashcardPage = () => {
          logActivity("word", `Menyimpan flashcard "${currentCard.german}" (${selectedLevel})`);
       }
     }
+  };
+
+  // --- LOGIKA SUDAH TAHU (Simpan ke user_known_words) ---
+  const handleMarkAsKnown = async () => {
+      const currentCard = flashcards[currentIndex];
+      if (!currentCard || !user) return;
+
+      const isKnown = knownWordsSet.has(currentCard.german);
+
+      if (isKnown) {
+          // Kalau udah tau, mau di-undo? (Hapus dari DB)
+          const { error } = await supabase
+              .from('user_known_words')
+              .delete()
+              .eq('user_id', user.id)
+              .eq('german', currentCard.german);
+          
+          if (!error) {
+              const newSet = new Set(knownWordsSet);
+              newSet.delete(currentCard.german);
+              setKnownWordsSet(newSet);
+              toast({ title: "Dihapus dari hafalan ❌" });
+          }
+      } else {
+          // Tandai sudah tahu (Insert ke DB)
+          const { error } = await supabase
+              .from('user_known_words')
+              .insert({ user_id: user.id, german: currentCard.german });
+          
+          if (!error) {
+              const newSet = new Set(knownWordsSet);
+              newSet.add(currentCard.german);
+              setKnownWordsSet(newSet);
+              toast({ title: "Kata Dikuasai! 🎉", description: "Masuk ke total hafalan." });
+              
+              // Opsional: Otomatis geser ke next card kalau belum di akhir
+              if (currentIndex < flashcards.length - 1) {
+                  setTimeout(() => goToNext(), 500);
+              }
+          }
+      }
   };
   
   const playAudio = (text: string) => {
@@ -168,17 +225,24 @@ const FlashcardPage = () => {
       if (e.key === "ArrowLeft") goToPrevious();
       if (e.key === "r" || e.key === "R") goToRandom();
       if (e.key === "s" || e.key === "S") handleBookmark(); 
+      if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleMarkAsKnown(); // Spasi/Enter buat checklist
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [goToNext, goToPrevious, goToRandom, currentIndex, flashcards, viewMode, words]);
+  }, [goToNext, goToPrevious, goToRandom, handleMarkAsKnown, currentIndex, flashcards, viewMode]);
+
+  const currentCard = flashcards[currentIndex];
+  const isCardKnown = currentCard ? knownWordsSet.has(currentCard.german) : false;
 
   return (
     <div className="min-h-screen">
       {/* Header */}
       <section className="border-b-4 border-foreground bg-secondary sticky top-16 z-40">
-        <div className="container mx-auto px-4 py-4"> {/* Padding diperkecil (py-4) */}
+        <div className="container mx-auto px-4 py-4"> 
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <h1 className="text-2xl md:text-3xl font-bold mb-0">
                 <span className="bg-foreground text-background px-4 py-1">FLASHCARD</span>
@@ -274,7 +338,7 @@ const FlashcardPage = () => {
       {/* MAIN CONTENT AREA */}
       <section className="container mx-auto px-4 py-12">
         
-        {/* === LOADING SPINNER (Baru) === */}
+        {/* === LOADING SPINNER === */}
         {isLoading && (
             <div className="flex flex-col items-center justify-center py-20">
                 <Loader2 className="h-12 w-12 animate-spin text-slate-400 mb-4" />
@@ -294,7 +358,26 @@ const FlashcardPage = () => {
               onBookmark={handleBookmark}
             />
 
-            {/* Controls */}
+            {/* ACTION BUTTONS (NEW: Tombol Ceklis) */}
+            <div className="mt-6 flex justify-center gap-4 max-w-lg mx-auto">
+                 <Button 
+                    onClick={handleMarkAsKnown}
+                    className={cn(
+                        "w-full h-12 text-lg font-bold border-2 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none",
+                        isCardKnown 
+                            ? "bg-green-100 text-green-700 border-green-600 hover:bg-green-200" 
+                            : "bg-white text-black border-black hover:bg-green-50"
+                    )}
+                 >
+                    {isCardKnown ? (
+                        <><Check className="w-6 h-6 mr-2" /> Sudah Hafal</>
+                    ) : (
+                        <><Check className="w-6 h-6 mr-2 opacity-30" /> Tandai Hafal</>
+                    )}
+                 </Button>
+            </div>
+
+            {/* Navigation Controls */}
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button
                 variant="outline"
@@ -346,10 +429,10 @@ const FlashcardPage = () => {
             {/* Keyboard Hints */}
             <div className="mt-8 text-center text-sm text-muted-foreground hidden lg:block">
               <p className="font-mono">
-                Gunakan tombol <kbd className="px-2 py-1 bg-accent border border-foreground rounded text-xs mx-1">←</kbd>
-                <kbd className="px-2 py-1 bg-accent border border-foreground rounded text-xs mx-1">→</kbd> untuk navigasi,
-                <kbd className="px-2 py-1 bg-accent border border-foreground rounded text-xs mx-1">R</kbd> untuk acak,
-                <kbd className="px-2 py-1 bg-accent border border-foreground rounded text-xs mx-1">S</kbd> untuk simpan/hapus
+                Navigasi: <kbd className="px-2 py-1 bg-accent border rounded text-xs mx-1">←</kbd>
+                <kbd className="px-2 py-1 bg-accent border rounded text-xs mx-1">→</kbd> 
+                | <kbd className="px-2 py-1 bg-accent border rounded text-xs mx-1">Spasi</kbd> Hafal
+                | <kbd className="px-2 py-1 bg-accent border rounded text-xs mx-1">S</kbd> Bookmark
               </p>
             </div>
           </div>
@@ -361,7 +444,7 @@ const FlashcardPage = () => {
                 <div className="mb-6 flex justify-between items-end border-b-2 border-slate-200 pb-4">
                     <div>
                         <h2 className="text-2xl font-black uppercase">Disimpan ({selectedLevel})</h2>
-                        <p className="text-slate-500 text-sm">Kata sulit yang kamu simpan dari level {selectedLevel}.</p>
+                        <p className="text-slate-500 text-sm">Kata sulit yang kamu bookmark.</p>
                     </div>
                 </div>
 
@@ -396,9 +479,8 @@ const FlashcardPage = () => {
                     </div>
                 ) : (
                     <div className="text-center py-16 bg-white border-2 border-dashed border-slate-300 rounded-xl">
-                        <List className="w-12 h-12 mx-auto text-slate-200 mb-2" />
-                        <p className="text-slate-500 font-bold">Belum ada kata disimpan di Level {selectedLevel}.</p>
-                        <p className="text-sm text-slate-400 mt-1">Tekan tombol bookmark pada kartu untuk menyimpan.</p>
+                        <Bookmark className="w-12 h-12 mx-auto text-slate-200 mb-2" />
+                        <p className="text-slate-500 font-bold">Belum ada bookmark di Level {selectedLevel}.</p>
                         <Button 
                             variant="link" 
                             className="mt-2 text-blue-600 font-bold"

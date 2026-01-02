@@ -58,6 +58,9 @@ const DashboardPage = () => {
 
   const [viewProgram, setViewProgram] = useState("aupair");
 
+  // --- STATE TOTAL HAFALAN (KNOWN WORDS) ---
+  const [totalKnownWords, setTotalKnownWords] = useState(0);
+
   // 1. CEK APAKAH USER ITU ADMIN?
   useEffect(() => {
     const checkRole = async () => {
@@ -78,6 +81,30 @@ const DashboardPage = () => {
     };
 
     checkRole();
+  }, [user]);
+
+  // 2. HITUNG TOTAL KATA YANG SUDAH DIKETAHUI
+  useEffect(() => {
+      const fetchStats = async () => {
+          if (!user) return;
+          const { count } = await supabase
+              .from('user_known_words')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', user.id);
+          
+          if (count !== null) setTotalKnownWords(count);
+      };
+
+      fetchStats();
+
+      // Realtime Update jika ada perubahan di tabel user_known_words
+      const channel = supabase.channel('known_words_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'user_known_words', filter: `user_id=eq.${user.id}` }, () => {
+            fetchStats();
+        })
+        .subscribe();
+    
+      return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   // Load Data User saat Dialog Buka
@@ -164,8 +191,9 @@ const DashboardPage = () => {
   const currentProg = programs[viewProgram];
   const reqIds = currentProg?.requirements.map(r => r.id) || [];
   const progPercent = getProgress(reqIds);
-  const totalWords = words.length;
-  const masteryLevel = totalWords > 100 ? "B1 Intermediate" : totalWords > 50 ? "A2 Elementary" : "A1 Beginner";
+  
+  // Logic Level Mastery berdasarkan Total Kata Diketahui
+  const masteryLevel = totalKnownWords > 1000 ? "C1 Advanced" : totalKnownWords > 500 ? "B2 Upper Int." : totalKnownWords > 250 ? "B1 Intermediate" : totalKnownWords > 100 ? "A2 Elementary" : "A1 Beginner";
 
   const groupedPrograms = {
     "Program Sosial (Gap Year)": Object.values(programs).filter(p => p.category === "social"),
@@ -238,11 +266,6 @@ const DashboardPage = () => {
                             </Button>
                         </DialogTrigger>
                         
-                        {/* --- PERBAIKAN DIALOG EDIT PROFILE --- 
-                            w-[95%] : Agar tidak nempel pinggir layar di HP
-                            max-w-md : Agar tidak terlalu lebar di Desktop
-                            rounded-xl : Biar sudutnya manis
-                        */}
                         <DialogContent className="w-[95%] sm:max-w-md rounded-xl border-4 border-foreground max-h-[85vh] overflow-y-auto">
                             <DialogHeader>
                                 <DialogTitle className="text-2xl font-black uppercase">Edit Profile</DialogTitle>
@@ -340,9 +363,6 @@ const DashboardPage = () => {
                                             </button>
                                         </AlertDialogTrigger>
                                         
-                                        {/* --- PERBAIKAN POPUP HAPUS AKUN --- 
-                                            w-[95%] sm:max-w-md rounded-xl
-                                        */}
                                         <AlertDialogContent className="w-[95%] sm:max-w-md rounded-xl border-4 border-red-600">
                                             <AlertDialogHeader>
                                                 <AlertDialogTitle className="text-2xl font-black text-red-600 uppercase">
@@ -404,7 +424,7 @@ const DashboardPage = () => {
                     <CardContent className="p-6 flex items-center justify-between">
                         <div>
                             <p className="text-sm font-black uppercase tracking-widest opacity-70 mb-1">Total Hafalan</p>
-                            <h3 className="text-5xl font-black">{totalWords}</h3>
+                            <h3 className="text-5xl font-black">{totalKnownWords}</h3>
                             <p className="text-xs font-bold mt-2">Estimasi: {masteryLevel}</p>
                         </div>
                         <BookOpen className="w-16 h-16 opacity-20" />
