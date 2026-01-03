@@ -5,6 +5,7 @@ export interface Vocabulary {
   german: string;
   indonesian: string;
   example: string;
+  category?: 'noun' | 'verb' | 'adjective' | 'phrase' | 'adverb' | 'other' | string;
 }
 
 export interface Dialog {

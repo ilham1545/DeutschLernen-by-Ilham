@@ -1,9 +1,23 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Volume2, Bookmark, BookmarkCheck, Sparkles } from "lucide-react"; // Tambah import Sparkles
+import { Volume2, Bookmark, BookmarkCheck, Sparkles } from "lucide-react";
 import { Vocabulary } from "@/data/lessons";
 import { cn } from "@/lib/utils";
+
+// HELPER WARNA KATEGORI (Desain Chip Lebih Rapi & Soft)
+const getCategoryBadge = (cat?: string) => {
+  const baseStyle = "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm backdrop-blur-sm";
+  
+  switch (cat) {
+    case 'noun': return <span className={`${baseStyle} bg-blue-50 text-blue-700 border-blue-200`}>Nomen</span>;
+    case 'verb': return <span className={`${baseStyle} bg-red-50 text-red-700 border-red-200`}>Verben</span>;
+    case 'adjective': return <span className={`${baseStyle} bg-yellow-50 text-yellow-700 border-yellow-200`}>Adjektiv</span>;
+    case 'phrase': return <span className={`${baseStyle} bg-purple-50 text-purple-700 border-purple-200`}>Frasa</span>;
+    case 'adverb': return <span className={`${baseStyle} bg-emerald-50 text-emerald-700 border-emerald-200`}>Adverb</span>;
+    default: return <span className={`${baseStyle} bg-slate-50 text-slate-600 border-slate-200`}>Lainnya</span>;
+  }
+};
 
 interface FlashCardProps {
   vocabulary: Vocabulary;
@@ -16,7 +30,6 @@ interface FlashCardProps {
 const FlashCard = ({ vocabulary, index, total, isBookmarked, onBookmark }: FlashCardProps) => {
   const [isFlipped, setIsFlipped] = useState(false);
 
-  // Fungsi audio untuk kata Jerman (Depan)
   const playAudio = (e: React.MouseEvent) => {
     e.stopPropagation();
     const utterance = new SpeechSynthesisUtterance(vocabulary.german);
@@ -24,7 +37,6 @@ const FlashCard = ({ vocabulary, index, total, isBookmarked, onBookmark }: Flash
     window.speechSynthesis.speak(utterance);
   };
 
-  // Fungsi audio untuk contoh kalimat (Belakang)
   const playExampleAudio = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (vocabulary.example) {
@@ -50,17 +62,20 @@ const FlashCard = ({ vocabulary, index, total, isBookmarked, onBookmark }: Flash
           isFlipped ? "rotate-y-180" : ""
         )}
       >
-        {/* --- SISI DEPAN (JERMAN - Tetap Putih) --- */}
+        {/* --- SISI DEPAN --- */}
         <div className="absolute inset-0 w-full h-full backface-hidden z-10">
           <Card className="w-full h-full border-4 border-foreground shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-white flex flex-col items-center justify-center p-8 relative overflow-hidden">
             
-            {/* Tombol-tombol Aksi (HANYA MUNCUL DI DEPAN) */}
+            {/* 1. POSISI BARU BADGE KATEGORI (POJOK KIRI ATAS) */}
+            <div className="absolute top-6 left-6 z-20">
+                {getCategoryBadge(vocabulary.category)}
+            </div>
+
+            {/* Tombol Kanan Atas */}
             <div className={cn(
               "absolute top-4 right-4 flex gap-2 z-20 transition-opacity duration-200",
               isFlipped ? "opacity-0 pointer-events-none" : "opacity-100"
             )}>
-              
-              {/* Tombol Audio */}
               <Button 
                 size="icon" 
                 variant="ghost" 
@@ -70,7 +85,6 @@ const FlashCard = ({ vocabulary, index, total, isBookmarked, onBookmark }: Flash
                 <Volume2 className="w-6 h-6 text-blue-600" />
               </Button>
               
-              {/* Tombol Save / Bookmark */}
               <Button 
                 size="icon" 
                 variant="ghost" 
@@ -79,7 +93,6 @@ const FlashCard = ({ vocabulary, index, total, isBookmarked, onBookmark }: Flash
                   isBookmarked ? "text-yellow-500 hover:bg-red-50 hover:text-red-500" : "text-slate-300 hover:text-yellow-500"
                 )} 
                 onClick={handleBookmarkClick}
-                title={isBookmarked ? "Hapus dari simpanan" : "Simpan kata"}
               >
                 {isBookmarked ? <BookmarkCheck className="w-6 h-6 fill-current" /> : <Bookmark className="w-6 h-6" />}
               </Button>
@@ -97,16 +110,11 @@ const FlashCard = ({ vocabulary, index, total, isBookmarked, onBookmark }: Flash
           </Card>
         </div>
 
-        {/* --- SISI BELAKANG (INDONESIA + CONTOH - Aesthetic Cream) --- */}
+        {/* --- SISI BELAKANG --- */}
         <div className="absolute inset-0 w-full h-full backface-hidden rotate-y-180 z-10">
-          {/* Ubah background jadi amber-50 (krem) dan border/shadow tetap hitam */}
           <Card className="w-full h-full border-4 border-foreground shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-amber-50 text-foreground flex flex-col items-center justify-center p-6 relative overflow-hidden">
-            
-            {/* IKON AESTHETIC LATAR BELAKANG */}
-            {/* Ikon Sparkles besar, miring, dan samar di pojok */}
             <Sparkles className="absolute -top-6 -right-6 h-32 w-32 text-amber-200/50 rotate-12 pointer-events-none" />
 
-            {/* Bagian Arti */}
             <div className="flex-1 flex flex-col items-center justify-center w-full relative z-10">
                 <span className="text-xs font-bold text-amber-700 uppercase tracking-widest mb-2 border-b border-amber-700/30 pb-1">
                 Artinya
@@ -116,32 +124,26 @@ const FlashCard = ({ vocabulary, index, total, isBookmarked, onBookmark }: Flash
                 </h2>
             </div>
 
-            {/* Bagian Separator Garis Putus-putus (Warna disesuaikan) */}
             <div className="w-full border-t-2 border-dashed border-amber-800/30 my-2 relative z-10"></div>
 
-            {/* Bagian Contoh Kalimat */}
             <div className="flex-1 flex flex-col items-center justify-center w-full relative z-10">
                 <span className="text-xs font-bold text-amber-700 uppercase tracking-widest mb-2">
                     Contoh Penggunaan
                 </span>
                 
                 {vocabulary.example ? (
-                    // Hover effect diubah jadi warna amber/oranye hangat
                     <div className="text-center group-example relative cursor-pointer px-4 py-3 rounded-xl hover:bg-amber-100/80 transition-colors duration-300 border-2 border-transparent hover:border-amber-200" onClick={playExampleAudio}>
                         <p className="text-lg italic font-medium text-amber-950 leading-relaxed">
                             "{vocabulary.example}"
                         </p>
-                        {/* Ikon audio kecil */}
                         <Volume2 size={14} className="inline-block mt-2 text-amber-700/50" />
                     </div>
                 ) : (
                     <p className="text-sm text-amber-700/60 italic">Tidak ada contoh kalimat.</p>
                 )}
             </div>
-
           </Card>
         </div>
-
       </div>
     </div>
   );
