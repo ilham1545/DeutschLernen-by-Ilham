@@ -24,7 +24,8 @@ import { cn } from "@/lib/utils";
 // --- TIPE DATA ---
 type Level = { id: string; title: string; description: string };
 type Lesson = { id: string; title: string; slug: string; level_id: string; order_index: number };
-type Vocab = { id: string; german: string; indonesian: string; example: string; lesson_id: string };
+// UPDATE: Tambah category
+type Vocab = { id: string; german: string; indonesian: string; example: string; lesson_id: string; category?: string }; 
 type DialogLineDB = { id?: string; speaker: string; german: string; indonesian?: string; order_index: number };
 type DialogDB = { id: string; title: string; lesson_id: string; dialog_lines?: DialogLineDB[] }; 
 type Exercise = { id: string; question: string; options: string[]; correct_answer: number; lesson_id: string };
@@ -112,7 +113,7 @@ const AdminPage = () => {
   
   const [formData, setFormData] = useState({
     id: "", title: "", description: "", slug: "", order_index: 0,
-    german: "", indonesian: "", example: "",
+    german: "", indonesian: "", example: "", category: "noun", // UPDATE: Default category
     explanation: "", examples: "", 
     dialog_lines: [] as { speaker: string, german: string, indonesian: string }[],
     question: "", options: ["", "", "", ""], correct_answer_idx: "0"
@@ -143,7 +144,7 @@ const AdminPage = () => {
   const resetForm = () => {
     setFormData({ 
         id: "", title: "", description: "", slug: "", order_index: 0, 
-        german: "", indonesian: "", example: "",
+        german: "", indonesian: "", example: "", category: "noun",
         explanation: "", examples: "", 
         dialog_lines: [{ speaker: "A", german: "", indonesian: "" }, { speaker: "B", german: "", indonesian: "" }],
         question: "", options: ["", "", "", ""], correct_answer_idx: "0"
@@ -353,7 +354,7 @@ const AdminPage = () => {
 
   const openEditDialog = (item: any, type: "vocab" | "lesson" | "dialog" | "exercise" | "announcement") => { 
       setFormType(type as any); setEditingItem(item); 
-      if (type === 'vocab') setFormData({ ...formData, ...item });
+      if (type === 'vocab') setFormData({ ...formData, ...item, category: item.category || 'noun' });
       else if (type === 'dialog') {
           const mappedLines = item.dialog_lines ? item.dialog_lines.map((l: any) => ({ speaker: l.speaker, german: l.german, indonesian: l.indonesian || "" })) : [];
           setFormData({ ...formData, id: item.id, title: item.title, dialog_lines: mappedLines });
@@ -511,7 +512,14 @@ const AdminPage = () => {
             return;
         }
 
-        const payload = { german: vocabInput, indonesian: formData.indonesian, example: formData.example, lesson_id: selectedLessonId };
+        // UPDATE: Tambah category ke payload
+        const payload = { 
+            german: vocabInput, 
+            indonesian: formData.indonesian, 
+            example: formData.example, 
+            lesson_id: selectedLessonId,
+            category: formData.category || 'noun' 
+        };
         
         if (editingItem) { 
             // FIX: Gunakan .select() untuk memastikan update berhasil
@@ -686,7 +694,14 @@ const AdminPage = () => {
                 for (const v of uniqueVocabs) {
                     const { data: exist } = await supabase.from("vocabularies").select("id").eq("german", v.german).maybeSingle();
                     if (!exist) {
-                        await supabase.from("vocabularies").insert({ lesson_id: lessonId, german: v.german, indonesian: v.indonesian, example: v.example });
+                        // UPDATE: Tambah category saat import
+                        await supabase.from("vocabularies").insert({ 
+                            lesson_id: lessonId, 
+                            german: v.german, 
+                            indonesian: v.indonesian, 
+                            example: v.example,
+                            category: v.category || 'noun' 
+                        });
                     }
                 }
             }
@@ -772,7 +787,8 @@ const AdminPage = () => {
   };
 
   const getPlaceholder = () => { 
-      if (importType === "vocab") return `{\n "level_id": "A1",\n "slug": "a1-perkenalan",\n "title": "Perkenalan Diri",\n "vocabulary": [\n  {"german": "Hallo", "indonesian": "Halo", "example": "Hallo, wie geht's?"},\n  {"german": "Tschüss", "indonesian": "Dah", "example": "Tschüss, bis morgen!"}\n ]\n}`;
+      // UPDATE: Tambah field category di placeholder
+      if (importType === "vocab") return `{\n "level_id": "A1",\n "slug": "a1-perkenalan",\n "title": "Perkenalan Diri",\n "vocabulary": [\n  {"german": "Hallo", "indonesian": "Halo", "example": "Hallo, wie geht's?", "category": "phrase"},\n  {"german": "der Tisch", "indonesian": "Meja", "example": "Das ist ein Tisch.", "category": "noun"}\n ]\n}`;
       if (importType === "material") return `{\n "level_id": "A1",\n "section_id": "a1_1_intro",\n "title": "Intro to German",\n "order_index": 1,\n "content": [\n  {"type": "text", "content": "Halo, selamat datang!"}\n ]\n}`;
       if (importType === "program") return `{\n "id": "aupair",\n "title": "Au Pair",\n "category": "general",\n "description": "Program pertukaran budaya...",\n "salary": "€280/bulan",\n "duration": "1 Tahun",\n "source": "aupair.com",\n "whatYouLearn": ["Budaya Jerman", "Bahasa Sehari-hari"],\n "requirements": [\n  {"id": "usia", "label": "Usia", "note": "18-26 Tahun"}\n ],\n "usefulLinks": [\n  {"label": "Official Info", "url": "https://...", "description": "Web resmi"}\n ]\n}`;
       if (importType === "quiz") return `{\n "level": "A1",\n "title": "Ujian A1 Dasar",\n "questions": [\n  {\n   "question": "Apa arti 'Danke'?",\n   "type": "multiple-choice",\n   "options": ["Halo", "Terima Kasih", "Maaf"],\n   "correct_answer": "Terima Kasih",\n   "explanation": "Danke artinya terima kasih."\n  }\n ]\n}`;
@@ -784,8 +800,6 @@ const AdminPage = () => {
 
   return (
     <div className="fixed inset-0 z-[99999] flex bg-slate-50 font-sans overflow-hidden">
-      {/* ... (KODE RENDER SAMA, CUMA LOGIC FUNCTION YANG BERUBAH) ... */}
-      
       {/* SIDEBAR */}
       {mobileMenuOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />}
       <aside className={cn("fixed lg:relative z-50 h-full w-72 flex flex-col transition-transform duration-300 ease-in-out bg-white border-l lg:border-r lg:border-l-0 border-slate-200 shadow-2xl lg:shadow-none right-0 lg:left-0 lg:right-auto", mobileMenuOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0")}>
@@ -875,10 +889,27 @@ const AdminPage = () => {
                                             </div>
                                             <div className="max-h-[500px] overflow-y-auto">
                                                 <Table>
-                                                    <TableHeader><TableRow><TableHead>Jerman</TableHead><TableHead>Indonesia</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+                                                    <TableHeader><TableRow><TableHead>Jerman</TableHead><TableHead>Indonesia</TableHead><TableHead>Kategori</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
                                                     <TableBody>
                                                         {vocabs.filter(v => v.german.toLowerCase().includes(vocabSearchTerm.toLowerCase()) || v.indonesian.toLowerCase().includes(vocabSearchTerm.toLowerCase())).map(v => (
-                                                        <TableRow key={v.id}><TableCell className="font-bold text-blue-700">{v.german}</TableCell><TableCell>{v.indonesian}</TableCell><TableCell className="text-right space-x-2"><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditDialog(v, "vocab")}><Edit2 className="w-4 h-4 text-slate-500"/></Button><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => confirmDelete(v, "vocab")}><Trash2 className="w-4 h-4 text-red-500"/></Button></TableCell></TableRow>
+                                                        <TableRow key={v.id}>
+                                                            <TableCell className="font-bold text-blue-700">{v.german}</TableCell>
+                                                            <TableCell>{v.indonesian}</TableCell>
+                                                            <TableCell>
+                                                                {/* UPDATE: Tampilkan Kategori di Tabel */}
+                                                                <span className={cn(
+                                                                    "px-2 py-1 text-[10px] font-bold uppercase rounded border",
+                                                                    v.category === 'noun' ? "bg-blue-50 text-blue-600 border-blue-200" :
+                                                                    v.category === 'verb' ? "bg-red-50 text-red-600 border-red-200" :
+                                                                    v.category === 'adjective' ? "bg-yellow-50 text-yellow-600 border-yellow-200" :
+                                                                    v.category === 'phrase' ? "bg-purple-50 text-purple-600 border-purple-200" :
+                                                                    "bg-slate-50 text-slate-600 border-slate-200"
+                                                                )}>
+                                                                    {v.category || '-'}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="text-right space-x-2"><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditDialog(v, "vocab")}><Edit2 className="w-4 h-4 text-slate-500"/></Button><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => confirmDelete(v, "vocab")}><Trash2 className="w-4 h-4 text-red-500"/></Button></TableCell>
+                                                        </TableRow>
                                                         ))}
                                                     </TableBody>
                                                 </Table>
@@ -1059,21 +1090,21 @@ const AdminPage = () => {
                                 </CardHeader>
                                 <CardContent className="pt-6">
                                     <form onSubmit={handleSaveQuizQuestion} className="space-y-6">
-                                        <div className="space-y-2"><Label>Pertanyaan</Label><Textarea placeholder="Misal: Apa bahasa Jermannya 'Kucing'?" value={quizQuestionText} onChange={e => setQuizQuestionText(e.target.value)} required className="font-medium min-h-[80px]" /></div>
-                                        <div className="space-y-2"><Label>Tipe Soal</Label><div className="flex gap-2">{["multiple-choice", "fill-blank", "reorder"].map((type) => (<div key={type} onClick={() => setQuizType(type as any)} className={cn("cursor-pointer px-4 py-2 rounded border-2 font-bold text-sm capitalize transition-all", quizType === type ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:border-slate-400')}>{type.replace("-", " ")}</div>))}</div></div>
-                                        
-                                        <div className="p-5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl space-y-4">
-                                            {quizType === "multiple-choice" && (<><Label>Pilihan Jawaban</Label>{quizOptions.map((opt, idx) => (<div key={idx} className="flex gap-2"><div className="w-10 h-10 flex items-center justify-center font-bold bg-white border rounded shrink-0">{String.fromCharCode(65 + idx)}</div><Input value={opt} onChange={(e) => {const newOpts = [...quizOptions]; newOpts[idx] = e.target.value; setQuizOptions(newOpts);}} placeholder={`Pilihan ${idx + 1}`} />{quizOptions.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => setQuizOptions(quizOptions.filter((_, i) => i !== idx))}><Trash2 className="w-4 h-4 text-red-500"/></Button>}</div>))}<Button type="button" variant="outline" size="sm" onClick={() => setQuizOptions([...quizOptions, ""])}><Plus className="w-4 h-4 mr-2"/> Tambah Pilihan</Button><div className="pt-2"><Label>Kunci Jawaban</Label><Select onValueChange={setQuizCorrectOption} value={quizCorrectOption}><SelectTrigger className="bg-white border-green-500/50"><SelectValue placeholder="Pilih yang benar..." /></SelectTrigger><SelectContent>{quizOptions.filter(o => o).map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div></>)}
-                                            {quizType === "fill-blank" && (<div className="space-y-2"><Label>Kunci Jawaban (Satu Kata)</Label><Input value={quizBlankAnswer} onChange={e => setQuizBlankAnswer(e.target.value)} placeholder="Misal: Katze" className="bg-white"/></div>)}
-                                            {quizType === "reorder" && (<div className="space-y-2"><Label>Kalimat Benar (Pisahkan koma)</Label><Textarea value={quizReorderSentence} onChange={e => setQuizReorderSentence(e.target.value)} placeholder="Misal: Ich, gehe, heute, ins, Kino" className="bg-white"/></div>)}
-                                        </div>
-                                        
-                                        <div className="space-y-2"><Label>Penjelasan (Opsional)</Label><Textarea value={quizExplanation} onChange={e => setQuizExplanation(e.target.value)} placeholder="Kenapa jawabannya itu?"/></div>
-                                        
-                                        <div className="flex gap-3">
-                                            {editingQuestion && <Button type="button" variant="outline" className="flex-1" onClick={() => {setEditingQuestion(null); setQuizQuestionText(""); setQuizExplanation("");}}>Batal Edit</Button>}
-                                            <Button type="submit" disabled={isUploading} className="flex-1 h-12 font-bold text-lg bg-green-600 hover:bg-green-700 text-white">{isUploading ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2"/>} {editingQuestion ? "Update Soal" : "Simpan Soal"}</Button>
-                                        </div>
+                                            <div className="space-y-2"><Label>Pertanyaan</Label><Textarea placeholder="Misal: Apa bahasa Jermannya 'Kucing'?" value={quizQuestionText} onChange={e => setQuizQuestionText(e.target.value)} required className="font-medium min-h-[80px]" /></div>
+                                            <div className="space-y-2"><Label>Tipe Soal</Label><div className="flex gap-2">{["multiple-choice", "fill-blank", "reorder"].map((type) => (<div key={type} onClick={() => setQuizType(type as any)} className={cn("cursor-pointer px-4 py-2 rounded border-2 font-bold text-sm capitalize transition-all", quizType === type ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:border-slate-400')}>{type.replace("-", " ")}</div>))}</div></div>
+                                            
+                                            <div className="p-5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl space-y-4">
+                                                {quizType === "multiple-choice" && (<><Label>Pilihan Jawaban</Label>{quizOptions.map((opt, idx) => (<div key={idx} className="flex gap-2"><div className="w-10 h-10 flex items-center justify-center font-bold bg-white border rounded shrink-0">{String.fromCharCode(65 + idx)}</div><Input value={opt} onChange={(e) => {const newOpts = [...quizOptions]; newOpts[idx] = e.target.value; setQuizOptions(newOpts);}} placeholder={`Pilihan ${idx + 1}`} />{quizOptions.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => setQuizOptions(quizOptions.filter((_, i) => i !== idx))}><Trash2 className="w-4 h-4 text-red-500"/></Button>}</div>))}<Button type="button" variant="outline" size="sm" onClick={() => setQuizOptions([...quizOptions, ""])}><Plus className="w-4 h-4 mr-2"/> Tambah Pilihan</Button><div className="pt-2"><Label>Kunci Jawaban</Label><Select onValueChange={setQuizCorrectOption} value={quizCorrectOption}><SelectTrigger className="bg-white border-green-500/50"><SelectValue placeholder="Pilih yang benar..." /></SelectTrigger><SelectContent>{quizOptions.filter(o => o).map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div></>)}
+                                                {quizType === "fill-blank" && (<div className="space-y-2"><Label>Kunci Jawaban (Satu Kata)</Label><Input value={quizBlankAnswer} onChange={e => setQuizBlankAnswer(e.target.value)} placeholder="Misal: Katze" className="bg-white"/></div>)}
+                                                {quizType === "reorder" && (<div className="space-y-2"><Label>Kalimat Benar (Pisahkan koma)</Label><Textarea value={quizReorderSentence} onChange={e => setQuizReorderSentence(e.target.value)} placeholder="Misal: Ich, gehe, heute, ins, Kino" className="bg-white"/></div>)}
+                                            </div>
+                                            
+                                            <div className="space-y-2"><Label>Penjelasan (Opsional)</Label><Textarea value={quizExplanation} onChange={e => setQuizExplanation(e.target.value)} placeholder="Kenapa jawabannya itu?"/></div>
+                                            
+                                            <div className="flex gap-3">
+                                                {editingQuestion && <Button type="button" variant="outline" className="flex-1" onClick={() => {setEditingQuestion(null); setQuizQuestionText(""); setQuizExplanation("");}}>Batal Edit</Button>}
+                                                <Button type="submit" disabled={isUploading} className="flex-1 h-12 font-bold text-lg bg-green-600 hover:bg-green-700 text-white">{isUploading ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2"/>} {editingQuestion ? "Update Soal" : "Simpan Soal"}</Button>
+                                            </div>
                                     </form>
                                 </CardContent>
                             </Card>
@@ -1247,21 +1278,6 @@ const AdminPage = () => {
           </DialogContent>
       </Dialog>
       
-      {/* ... (Previous Dialogs like Material, Program, Edit, Delete are assumed to be here, copied from previous code) ... */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-         <DialogContent className="max-w-[90vw] sm:max-w-sm rounded-2xl p-6">
-            <DialogHeader className="flex flex-col items-center gap-2 text-center pb-2">
-                <div className="p-3 bg-red-100 rounded-full text-red-600"><AlertTriangle className="w-8 h-8" /></div>
-                <DialogTitle className="text-xl">Yakin hapus data ini?</DialogTitle>
-                <DialogDescription>Data yang dihapus tidak bisa dikembalikan lagi.</DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="flex flex-row justify-center gap-2 pt-2">
-                <Button variant="outline" className="flex-1" onClick={() => setDeleteDialogOpen(false)}>Batal</Button>
-                <Button variant="destructive" className="flex-1" onClick={performDelete} disabled={isUploading}>{isUploading ? <Loader2 className="w-4 h-4 animate-spin"/> : "Ya, Hapus"}</Button>
-            </DialogFooter>
-         </DialogContent>
-      </Dialog>
-
       {/* --- DIALOG EDIT FORM (VOCAB/LESSON/DIALOG/EXERCISE) --- */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-[90dvh] w-full sm:max-w-md rounded-2xl border-0 shadow-xl overflow-hidden max-h-[85dvh] flex flex-col p-0 bg-white">
@@ -1272,9 +1288,27 @@ const AdminPage = () => {
                     <>
                         <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Kata Jerman</Label><Input value={formData.german} onChange={e => setFormData({...formData, german: e.target.value})} className="font-bold" placeholder="Contoh: der Apfel"/></div>
                         <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Arti Indonesia</Label><Input value={formData.indonesian} onChange={e => setFormData({...formData, indonesian: e.target.value})} className="font-bold" placeholder="Contoh: Apel"/></div>
+                        
+                        {/* UPDATE: PILIH KATEGORI */}
+                        <div className="space-y-1">
+                            <Label className="text-xs font-bold text-slate-500">Kategori</Label>
+                            <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val})}>
+                                <SelectTrigger><SelectValue placeholder="Pilih..."/></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="noun">Nomen (Kata Benda)</SelectItem>
+                                    <SelectItem value="verb">Verb (Kata Kerja)</SelectItem>
+                                    <SelectItem value="adjective">Adjektiv (Sifat)</SelectItem>
+                                    <SelectItem value="phrase">Frasa</SelectItem>
+                                    <SelectItem value="adverb">Adverb (Keterangan)</SelectItem>
+                                    <SelectItem value="other">Lainnya</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
                         <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Contoh Kalimat</Label><Textarea value={formData.example} onChange={e => setFormData({...formData, example: e.target.value})} placeholder="Contoh: Ich esse einen Apfel."/></div>
                     </>
                 )}
+                {/* ... (BAGIAN LAIN TETAP SAMA) ... */}
                 {formType === "dialog" && (
                     <>
                         <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Judul Dialog</Label><Input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="font-bold"/></div>
@@ -1284,28 +1318,28 @@ const AdminPage = () => {
                             <div className="border rounded-lg p-2 space-y-2 max-h-[40vh] overflow-y-auto">
                                 {formData.dialog_lines.map((line, idx) => (
                                     <div key={idx} className="flex flex-col gap-1 p-3 border rounded-lg bg-slate-50 shadow-sm relative group">
-                                        <div className="flex gap-2 items-center">
-                                            <span className="text-[10px] font-bold text-slate-400 w-6">#{idx+1}</span>
-                                            <Input className="w-24 h-8 text-xs font-bold bg-white" placeholder="Speaker" value={line.speaker} onChange={e => {
+                                            <div className="flex gap-2 items-center">
+                                                <span className="text-[10px] font-bold text-slate-400 w-6">#{idx+1}</span>
+                                                <Input className="w-24 h-8 text-xs font-bold bg-white" placeholder="Speaker" value={line.speaker} onChange={e => {
+                                                    const newLines = [...formData.dialog_lines];
+                                                    newLines[idx].speaker = e.target.value;
+                                                    setFormData({...formData, dialog_lines: newLines});
+                                                }} />
+                                                <Button size="icon" variant="ghost" className="h-8 w-8 ml-auto text-red-500 hover:bg-red-50" onClick={() => {
+                                                    const newLines = formData.dialog_lines.filter((_, i) => i !== idx);
+                                                    setFormData({...formData, dialog_lines: newLines});
+                                                }}><Trash2 className="w-4 h-4"/></Button>
+                                            </div>
+                                            <Textarea className="text-sm min-h-[50px] bg-white resize-none" placeholder="Teks Jerman..." value={line.german} onChange={e => {
                                                 const newLines = [...formData.dialog_lines];
-                                                newLines[idx].speaker = e.target.value;
+                                                newLines[idx].german = e.target.value;
                                                 setFormData({...formData, dialog_lines: newLines});
                                             }} />
-                                            <Button size="icon" variant="ghost" className="h-8 w-8 ml-auto text-red-500 hover:bg-red-50" onClick={() => {
-                                                const newLines = formData.dialog_lines.filter((_, i) => i !== idx);
+                                            <Input className="h-8 text-xs bg-white" placeholder="Terjemahan Indonesia (Opsional)" value={line.indonesian || ""} onChange={e => {
+                                                const newLines = [...formData.dialog_lines];
+                                                newLines[idx].indonesian = e.target.value;
                                                 setFormData({...formData, dialog_lines: newLines});
-                                            }}><Trash2 className="w-4 h-4"/></Button>
-                                        </div>
-                                        <Textarea className="text-sm min-h-[50px] bg-white resize-none" placeholder="Teks Jerman..." value={line.german} onChange={e => {
-                                            const newLines = [...formData.dialog_lines];
-                                            newLines[idx].german = e.target.value;
-                                            setFormData({...formData, dialog_lines: newLines});
-                                        }} />
-                                        <Input className="h-8 text-xs bg-white" placeholder="Terjemahan Indonesia (Opsional)" value={line.indonesian || ""} onChange={e => {
-                                            const newLines = [...formData.dialog_lines];
-                                            newLines[idx].indonesian = e.target.value;
-                                            setFormData({...formData, dialog_lines: newLines});
-                                        }} />
+                                            }} />
                                     </div>
                                 ))}
                                 <Button size="sm" variant="outline" className="w-full text-xs border-dashed border-2 py-4 h-auto" onClick={() => setFormData({...formData, dialog_lines: [...formData.dialog_lines, {speaker: "A", german: "", indonesian: ""}]})}><Plus className="w-4 h-4 mr-2"/> Tambah Baris Dialog</Button>
