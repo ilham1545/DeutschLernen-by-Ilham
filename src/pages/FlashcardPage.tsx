@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronLeft, ChevronRight, Shuffle, RotateCcw, List, Layers, Trash2, Volume2, Loader2, Check, Filter, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, Shuffle, RotateCcw, List, Layers, Trash2, Volume2, Loader2, Check, Filter, ChevronDown, Bookmark } from "lucide-react";
 import { Vocabulary } from "@/data/lessons"; 
 import { saveLastCardPosition, loadLastCardPosition } from "@/utils/progress";
 import FlashCard from "@/components/FlashCard";
@@ -286,7 +286,7 @@ const FlashcardPage = () => {
                             onClick={() => setViewMode("list")}
                             className={cn("w-10 h-10 border-2 border-foreground rounded font-bold flex items-center justify-center relative", viewMode === "list" ? "bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "bg-transparent opacity-50")}
                         >
-                            <List size={18} />
+                            <Bookmark size={18} />
                             {savedWordsForLevel.length > 0 && (
                                 <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full border border-black font-bold">
                                     {savedWordsForLevel.length}
@@ -406,8 +406,8 @@ const FlashcardPage = () => {
                         onClick={() => setViewMode("list")}
                         className={cn("px-4 py-2 border-2 border-foreground rounded font-bold transition-all flex items-center gap-2 relative", viewMode === "list" ? "bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "bg-transparent opacity-50 hover:opacity-100")}
                     >
-                        <List size={18} />
-                        <span className="text-sm uppercase">List</span>
+                        <Bookmark size={18} />
+                        <span className="text-sm uppercase">Kata Tersimpan</span>
                         {savedWordsForLevel.length > 0 && (
                             <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full border border-black font-bold">
                                 {savedWordsForLevel.length}
