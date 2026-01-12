@@ -116,9 +116,9 @@ export const AnnouncementDisplay = () => {
                animation: marquee-scroll 20s linear infinite;
              }
 
-             /* Animasi Desktop: Standar (45s) */
+             /* Animasi Desktop: Standar (30s) */
              .animate-marquee-desktop {
-               animation: marquee-scroll 25s linear infinite;
+               animation: marquee-scroll 30s linear infinite;
              }
            `}</style>
         </div>
