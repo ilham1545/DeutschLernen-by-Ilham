@@ -59,19 +59,68 @@ export const AnnouncementDisplay = () => {
 
   return (
     <>
-      {/* 1. MARQUEE / RUNNING TEXT */}
+      {/* 1. MARQUEE / RUNNING TEXT (SEPARATED MOBILE & DESKTOP) */}
       {marquees.length > 0 && (
-        <div className="relative w-full z-40 bg-white border-b border-slate-100">
-           <div className="relative flex overflow-x-hidden py-3">
-             <div className={cn("whitespace-nowrap flex gap-12 items-center", marquees[0].direction === 'right' ? "animate-marquee-reverse" : "animate-marquee")}>
-                 {[...marquees, ...marquees, ...marquees].map((item, idx) => (
-                    <div key={`${item.id}-${idx}`} className="flex items-center gap-3 mx-6 pl-4 border-l-4 border-indigo-500">
-                        <span className="font-black text-xs uppercase tracking-widest text-indigo-600">{item.title}</span>
-                        <span className="text-sm font-medium text-slate-600" dangerouslySetInnerHTML={{ __html: Array.isArray(item.content) ? item.content.find(c => c.type === 'text')?.content : "" }}></span>
-                    </div>
-                 ))}
-             </div>
+        <div className="relative w-full z-60 bg-white border-b border-slate-100 overflow-hidden py-4 flex items-center">
+           
+           {/* === VERSI MOBILE (Sederhana, Cepat, Anti-Potong) === */}
+           <div className="md:hidden flex w-max animate-marquee-mobile hover:[animation-play-state:paused] items-center">
+             {/* KITA RENDER 2 KALI BIAR LOOPING */}
+             {[0, 1].map((i) => (
+                <div key={`m-${i}`} className="flex shrink-0 items-center">
+                    {marquees.map((item, idx) => (
+                        <div key={`m-${i}-${idx}`} className="flex items-center gap-2 mx-4 pl-3 border-l-4 border-indigo-500">
+                            <span className="font-black text-[10px] uppercase tracking-widest text-indigo-600 whitespace-nowrap">
+                                {item.title}
+                            </span>
+                            <span className="text-xs font-medium text-slate-600 whitespace-nowrap">
+                                {Array.isArray(item.content) 
+                                    ? item.content.find(c => c.type === 'text')?.content?.replace(/<[^>]+>/g, '') 
+                                    : ""}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+             ))}
            </div>
+
+           {/* === VERSI DESKTOP (Rapi, Elegan, Lebih Lambat) === */}
+           <div className="hidden md:flex w-max animate-marquee-desktop hover:[animation-play-state:paused] items-center">
+             {[0, 1].map((i) => (
+                <div key={`d-${i}`} className="flex shrink-0 items-center">
+                    {marquees.map((item, idx) => (
+                        <div key={`d-${i}-${idx}`} className="flex items-center gap-3 mx-8 pl-4 border-l-4 border-indigo-500">
+                            <span className="font-black text-xs uppercase tracking-widest text-indigo-600 whitespace-nowrap">
+                                {item.title}
+                            </span>
+                            <span className="text-sm font-medium text-slate-600 whitespace-nowrap">
+                                {Array.isArray(item.content) 
+                                    ? item.content.find(c => c.type === 'text')?.content?.replace(/<[^>]+>/g, '') 
+                                    : ""}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+             ))}
+           </div>
+
+           {/* STYLE MANUAL (DIPISAH JUGA) */}
+           <style>{`
+             @keyframes marquee-scroll {
+               0% { transform: translateX(0); }
+               100% { transform: translateX(-50%); }
+             }
+             
+             /* Animasi Mobile: Lebih Cepat (20s) */
+             .animate-marquee-mobile {
+               animation: marquee-scroll 20s linear infinite;
+             }
+
+             /* Animasi Desktop: Standar (45s) */
+             .animate-marquee-desktop {
+               animation: marquee-scroll 25s linear infinite;
+             }
+           `}</style>
         </div>
       )}
 
