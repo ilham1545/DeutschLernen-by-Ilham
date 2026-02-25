@@ -9,7 +9,6 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import LevelPage from "./pages/LevelPage";
 import FlashcardPage from "./pages/FlashcardPage";
-import ProgressPage from "./pages/ProgressPage";
 import MaterialPage from "./pages/MaterialPage";
 import ExamPages from "@/pages/ExamPages"; 
 import PlannerPage from "./pages/PlannerPage";
@@ -57,7 +56,6 @@ const MainLayout = () => {
           <Route path="/" element={<Index />} />
           <Route path="/level/:levelId" element={<LevelPage />} />
           <Route path="/flashcard" element={<FlashcardPage />} />
-          <Route path="/progress" element={<ProgressPage />} />
           <Route path="/planner" element={<PlannerPage />} />
           <Route path="/material/:levelId" element={<MaterialPage />} />
           <Route path="/simulation/:examId" element={<ExamPages />} />

@@ -171,7 +171,7 @@ const Header = () => {
                 <DropdownMenu>
                   <DropdownMenuTrigger className={cn(
                     "flex items-center gap-2 px-3 py-2 font-medium transition-all border-2 rounded-md outline-none focus:border-foreground data-[state=open]:border-foreground group",
-                    location.pathname.includes("/progress") || location.pathname.includes("/planner") || location.pathname.includes("/mein-weg")
+                    location.pathname.includes("/planner") || location.pathname.includes("/mein-weg")
                       ? "bg-foreground text-background border-foreground"
                       : "bg-background text-foreground border-transparent hover:border-foreground"
                   )}>
@@ -187,11 +187,6 @@ const Header = () => {
                       </Link>
                     </DropdownMenuItem>
 
-                    <DropdownMenuItem asChild className="focus:bg-accent focus:text-foreground cursor-pointer p-0">
-                      <Link to="/progress" className="w-full font-bold py-3 px-2 flex items-center gap-2">
-                        <BarChart3 size={18} /> Statistik
-                      </Link>
-                    </DropdownMenuItem>
                     <div className="h-[2px] bg-foreground w-full my-0"></div>
                     <DropdownMenuItem asChild className="focus:bg-accent focus:text-foreground cursor-pointer p-0">
                       <Link to="/planner" className="w-full font-bold py-3 px-2 flex items-center gap-2">
@@ -396,18 +391,12 @@ const Header = () => {
                         </Link>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 px-2">
-                      <Link
-                        to="/progress"
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="text-center py-3 border-2 border-foreground font-bold bg-yellow-100 text-foreground active:bg-yellow-200 transition-colors rounded-md"
-                      >
-                        Statistik
-                      </Link>
+                    {/* <div className="grid grid-cols-2 gap-2 px-2"> */}
+                    <div className="px-2 mb-2">
                       <Link
                         to="/planner"
                         onClick={() => setMobileMenuOpen(false)}
-                        className="text-center py-3 border-2 border-foreground font-bold bg-blue-100 text-foreground active:bg-blue-200 transition-colors rounded-md"
+                        className="flex items-center justify-center gap-2 w-full text-center py-3 border-2 border-foreground font-bold bg-blue-100 text-foreground active:bg-blue-200 transition-colors rounded-md"
                       >
                         Planner
                       </Link>
