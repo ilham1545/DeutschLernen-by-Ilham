@@ -66,7 +66,7 @@ const Header = () => {
               <span className="hidden lg:inline">Home</span>
             </Link>
 
-            {/* 2. DROPDOWN MATERI */}
+            {/* 2. DROPDOWN MATERI (Disesuaikan berdasarkan login) */}
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-2 px-3 py-2 font-medium transition-all border-2 border-transparent hover:border-foreground rounded-md outline-none focus:border-foreground data-[state=open]:border-foreground group">
                 <Library size={18} />
@@ -74,7 +74,15 @@ const Header = () => {
                 <ChevronDown size={16} className="group-data-[state=open]:rotate-180 transition-transform" />
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-40 border-2 border-foreground bg-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-none mt-2">
-                {levels.map((level) => (
+                {/* A1 selalu muncul */}
+                <DropdownMenuItem asChild className="focus:bg-accent focus:text-foreground cursor-pointer">
+                  <Link to={`/material/A1`} className="w-full font-bold py-2">
+                    Materi A1
+                  </Link>
+                </DropdownMenuItem>
+                
+                {/* A2, B1, B2 hanya muncul jika sudah login */}
+                {user && levels.filter(lvl => lvl !== "A1").map((level) => (
                   <DropdownMenuItem key={`mat-${level}`} asChild className="focus:bg-accent focus:text-foreground cursor-pointer">
                     <Link to={`/material/${level}`} className="w-full font-bold py-2">
                       Materi {level}
@@ -84,48 +92,48 @@ const Header = () => {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* 3. DROPDOWN WORTSCHATZ */}
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-2 px-3 py-2 font-medium transition-all border-2 border-transparent hover:border-foreground rounded-md outline-none focus:border-foreground data-[state=open]:border-foreground group">
-                <BookOpen size={18} />
-                <span>Wortschatz</span>
-                <ChevronDown size={16} className="group-data-[state=open]:rotate-180 transition-transform" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-48 border-2 border-foreground bg-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-none mt-2">
-                {levels.map((level) => (
-                  <DropdownMenuItem key={`voc-${level}`} asChild className="focus:bg-accent focus:text-foreground cursor-pointer">
-                    <Link to={`/level/${level}`} className="w-full font-bold py-2">
-                      Kosakata {level}
-                    </Link>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* 4. DROPDOWN UJIAN */}
-            <DropdownMenu>
-              <DropdownMenuTrigger className={cn(
-                "flex items-center gap-2 px-3 py-2 font-medium transition-all border-2 border-transparent hover:border-foreground rounded-md outline-none focus:border-foreground data-[state=open]:border-foreground group",
-                location.pathname.includes("EXAM") && "bg-foreground text-background border-foreground"
-              )}>
-                <ClipboardCheck size={18} />
-                <span>Ujian</span>
-                <ChevronDown size={16} className="group-data-[state=open]:rotate-180 transition-transform" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-48 border-2 border-foreground bg-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-none mt-2">
-                {levels.map((level) => (
-                  <DropdownMenuItem key={`exam-${level}`} asChild className="focus:bg-accent focus:text-foreground cursor-pointer">
-                    <Link to={`/material/EXAM_${level}`} className="w-full font-bold py-2">
-                      Simulasi {level}
-                    </Link>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
             {/* MENU BERIKUTNYA HANYA UNTUK USER LOGIN (DESKTOP) */}
             {user && (
               <>
+                {/* 3. DROPDOWN WORTSCHATZ */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="flex items-center gap-2 px-3 py-2 font-medium transition-all border-2 border-transparent hover:border-foreground rounded-md outline-none focus:border-foreground data-[state=open]:border-foreground group">
+                    <BookOpen size={18} />
+                    <span>Wortschatz</span>
+                    <ChevronDown size={16} className="group-data-[state=open]:rotate-180 transition-transform" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-48 border-2 border-foreground bg-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-none mt-2">
+                    {levels.map((level) => (
+                      <DropdownMenuItem key={`voc-${level}`} asChild className="focus:bg-accent focus:text-foreground cursor-pointer">
+                        <Link to={`/level/${level}`} className="w-full font-bold py-2">
+                          Kosakata {level}
+                        </Link>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* 4. DROPDOWN UJIAN */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger className={cn(
+                    "flex items-center gap-2 px-3 py-2 font-medium transition-all border-2 border-transparent hover:border-foreground rounded-md outline-none focus:border-foreground data-[state=open]:border-foreground group",
+                    location.pathname.includes("EXAM") && "bg-foreground text-background border-foreground"
+                  )}>
+                    <ClipboardCheck size={18} />
+                    <span>Ujian</span>
+                    <ChevronDown size={16} className="group-data-[state=open]:rotate-180 transition-transform" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-48 border-2 border-foreground bg-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-none mt-2">
+                    {levels.map((level) => (
+                      <DropdownMenuItem key={`exam-${level}`} asChild className="focus:bg-accent focus:text-foreground cursor-pointer">
+                        <Link to={`/material/EXAM_${level}`} className="w-full font-bold py-2">
+                          Simulasi {level}
+                        </Link>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
                 {/* 5. DROPDOWN LAINNYA */}
                 <DropdownMenu>
                   <DropdownMenuTrigger className={cn(
@@ -275,60 +283,23 @@ const Header = () => {
                 <Home size={20} /> Home
               </Link>
 
-              {/* Group Materi (TAMPIL UNTUK SEMUA) */}
+              {/* Group Materi (Disesuaikan berdasarkan login, kotaknya tetap seragam) */}
               <div className="px-2">
                 <div className="px-2 pb-2 text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
                   <Library size={14} /> Materi Pelajaran
                 </div>
                 <div className="grid grid-cols-4 gap-2 px-2">
                   {levels.map((level) => (
-                    <Link
-                      key={`mob-mat-${level}`}
-                      to={`/material/${level}`}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="text-center py-2 border-2 border-foreground font-bold bg-background text-foreground shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-y-[3px] active:translate-x-[3px] transition-all rounded-md"
-                    >
-                      {level}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              {/* Group Ujian (TAMPIL UNTUK SEMUA) */}
-              <div className="px-2 mt-2">
-                <div className="px-2 pb-2 text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                  <ClipboardCheck size={14} /> Simulasi Ujian
-                </div>
-                <div className="grid grid-cols-2 gap-2 px-2">
-                  {levels.map((level) => (
-                    <Link
-                      key={`mob-exam-${level}`}
-                      to={`/material/EXAM_${level}`}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center justify-between px-3 py-3 border-2 border-foreground font-bold bg-red-50 text-red-900 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-y-[3px] active:translate-x-[3px] transition-all rounded-md"
-                    >
-                      <span>Simulasi {level}</span>
-                      <ChevronDown size={14} className="-rotate-90" />
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              {/* Group Wortschatz (TAMPIL UNTUK SEMUA) */}
-              <div className="px-2 mt-2">
-                <div className="px-2 pb-2 text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                  <BookOpen size={14} /> Wortschatz
-                </div>
-                <div className="grid grid-cols-4 gap-2 px-2">
-                  {levels.map((level) => (
-                    <Link
-                      key={`mob-voc-${level}`}
-                      to={`/level/${level}`}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="text-center py-2 border-2 border-foreground font-bold text-foreground bg-background active:bg-foreground active:text-background transition-colors rounded-md"
-                    >
-                      {level}
-                    </Link>
+                    (user || level === "A1") && (
+                      <Link
+                        key={`mob-mat-${level}`}
+                        to={`/material/${level}`}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="text-center py-2 border-2 border-foreground font-bold bg-background text-foreground shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-y-[3px] active:translate-x-[3px] transition-all rounded-md"
+                      >
+                        {level}
+                      </Link>
+                    )
                   ))}
                 </div>
               </div>
@@ -336,6 +307,45 @@ const Header = () => {
               {/* MENU RAHASIA: HANYA MUNCUL JIKA USER LOGIN */}
               {user && (
                 <>
+                  {/* Group Ujian */}
+                  <div className="px-2 mt-2">
+                    <div className="px-2 pb-2 text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                      <ClipboardCheck size={14} /> Simulasi Ujian
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 px-2">
+                      {levels.map((level) => (
+                        <Link
+                          key={`mob-exam-${level}`}
+                          to={`/material/EXAM_${level}`}
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center justify-between px-3 py-3 border-2 border-foreground font-bold bg-red-50 text-red-900 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-y-[3px] active:translate-x-[3px] transition-all rounded-md"
+                        >
+                          <span>Simulasi {level}</span>
+                          <ChevronDown size={14} className="-rotate-90" />
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Group Wortschatz */}
+                  <div className="px-2 mt-2">
+                    <div className="px-2 pb-2 text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                      <BookOpen size={14} /> Wortschatz
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 px-2">
+                      {levels.map((level) => (
+                        <Link
+                          key={`mob-voc-${level}`}
+                          to={`/level/${level}`}
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="text-center py-2 border-2 border-foreground font-bold text-foreground bg-background active:bg-foreground active:text-background transition-colors rounded-md"
+                        >
+                          {level}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="border-t-2 border-dashed border-foreground/30 my-2 mx-4"></div>
 
                   {/* Group Latihan */}
@@ -391,7 +401,6 @@ const Header = () => {
                         </Link>
                     </div>
 
-                    {/* <div className="grid grid-cols-2 gap-2 px-2"> */}
                     <div className="px-2 mb-2">
                       <Link
                         to="/planner"

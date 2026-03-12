@@ -252,9 +252,9 @@ const Index = () => {
           </div>
           
           <div className="pt-16 pb-10 px-8 text-center">
-             <DialogTitle className="text-3xl font-black text-slate-900 mb-1">Muhammad Ilham Ramdhani</DialogTitle>
+             <DialogTitle className="text-3xl font-black text-slate-900 mb-1">HAM</DialogTitle>
              <div className="flex justify-center items-center gap-2 mb-6">
-                <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold uppercase tracking-wider">Prompt Engineer & SPV</span>
+                <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold uppercase tracking-wider">Developer</span>
              </div>
              
              <p className="text-slate-600 text-sm leading-relaxed mb-8">
