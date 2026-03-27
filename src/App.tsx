@@ -45,7 +45,7 @@ const ProtectedRoute = () => {
 
   // 👇 LOGIKA PENGECUALIAN A1 👇
   // Satpam akan ngecek apakah URL saat ini adalah materi/level A1
-  const isFreeAccess = location.pathname.includes("/material/A1") || location.pathname.includes("/level/A1");
+  const isFreeAccess = location.pathname.includes("/material/A1");
 
   if (loading) {
     return (
