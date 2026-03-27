@@ -1,29 +1,25 @@
 import { useState } from "react";
 import { Check, ChevronDown, ChevronUp, BookOpen, MessageSquare, PenTool, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-// Hapus import interface SubSection dari data/lessons jika bikin konflik, kita pakai any dulu biar aman
-import { saveProgress, isSubSectionComplete } from "@/utils/progress";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
 interface LessonCardProps {
   levelId: string;
-  subSection: any; // Ganti ke any biar fleksibel nerima data dari Supabase
-  onProgressUpdate: () => void;
+  subSection: any; // Data dari Supabase
+  isComplete: boolean; // 👈 Status dikirim dari bapaknya
+  onMarkComplete: (lessonId: string) => void; // 👈 Fungsi dari bapaknya
 }
 
-const LessonCard = ({ levelId, subSection, onProgressUpdate }: LessonCardProps) => {
+const LessonCard = ({ levelId, subSection, isComplete, onMarkComplete }: LessonCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<"vocabulary" | "dialog" | "exercise">("vocabulary");
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
   const [showResults, setShowResults] = useState(false);
   
-  const isComplete = isSubSectionComplete(levelId, subSection.id);
   const { toast } = useToast();
 
-  // --- 🛡️ DATA SANITIZER (BAGIAN INI YANG MEMPERBAIKI ERROR) 🛡️ ---
-  // Kita pastikan data selalu berupa Array, walau dari database null/undefined/string
-  
+  // --- 🛡️ DATA SANITIZER 🛡️ ---
   const safeVocabs = Array.isArray(subSection.vocabulary) 
     ? subSection.vocabulary 
     : (subSection.vocabularies || []);
@@ -35,17 +31,14 @@ const LessonCard = ({ levelId, subSection, onProgressUpdate }: LessonCardProps) 
   const safeExercises = Array.isArray(subSection.exercises) 
     ? subSection.exercises.map((ex: any) => ({
         ...ex,
-        // Cek: kalau options bentuknya string, kita parse jadi JSON. Kalau array, biarin.
         options: typeof ex.options === "string" ? JSON.parse(ex.options) : (ex.options || []),
-        // Pastikan correctAnswer berupa angka
         correctAnswer: Number(ex.correct_answer || ex.correctAnswer || 0) 
       }))
     : [];
   // ------------------------------------------------------------------
 
   const handleMarkComplete = () => {
-    saveProgress(levelId, subSection.id);
-    onProgressUpdate();
+    onMarkComplete(subSection.id); // Panggil fungsi bapaknya
     toast({
       title: "Selamat! 🎉",
       description: `Sub-bab "${subSection.title}" telah ditandai selesai.`,

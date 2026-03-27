@@ -1,34 +1,86 @@
 import { useParams, Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { ArrowLeft, ArrowRight, Loader2, AlertTriangle } from "lucide-react";
-import { loadProgress } from "@/utils/progress";
+import { loadProgress, saveProgress } from "@/utils/progress";
 import LessonCard from "@/components/LessonCard";
 import { Button } from "@/components/ui/button";
-import { useLevelData } from "@/hooks/useLevelData"; // Import Hook Baru
+import { useLevelData } from "@/hooks/useLevelData";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 const LevelPage = () => {
   const { levelId } = useParams<{ levelId: string }>();
-  
-  // Panggil Hook Database
   const { level, loading, error } = useLevelData(levelId);
+  const { user } = useAuth(); // Ambil data user yang login
   
-  const [progressData, setProgressData] = useState<Record<string, string>>({});
+  const [completedSet, setCompletedSet] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Logic Navigasi Next/Prev Level (Hardcoded list ID karena tabel levels cuma dikit)
   const levelList = ["A1", "A2", "B1", "B2"];
   const currentIndex = levelList.indexOf(levelId || "");
   const prevLevelId = currentIndex > 0 ? levelList[currentIndex - 1] : null;
   const nextLevelId = currentIndex < levelList.length - 1 ? levelList[currentIndex + 1] : null;
 
+  // --- FETCH PROGRESS (DARI SUPABASE / LOCALSTORAGE) ---
   useEffect(() => {
-    if (levelId) {
-      setProgressData(loadProgress(levelId));
-    }
-  }, [levelId, refreshKey]);
+    const fetchProgress = async () => {
+      if (!levelId) return;
 
-  const handleProgressUpdate = () => {
+      if (user) {
+        try {
+          // Kalau Login, tarik dari Supabase
+          const { data, error } = await supabase
+            .from("user_progress")
+            .select("lesson_id")
+            .eq("user_id", user.id)
+            .not("lesson_id", "is", null); // Pastikan bukan data kosong
+
+          if (!error && data) {
+            setCompletedSet(new Set(data.map((d: any) => d.lesson_id)));
+          } else {
+            // Fallback ke LocalStorage misal ada error / kolom belum dibuat
+            const local = loadProgress(levelId);
+            setCompletedSet(new Set(Object.keys(local).filter(k => local[k] === "done")));
+          }
+        } catch (err) {
+          const local = loadProgress(levelId);
+          setCompletedSet(new Set(Object.keys(local).filter(k => local[k] === "done")));
+        }
+      } else {
+        // Kalau belum Login (Guest buka A1), pakai LocalStorage
+        const local = loadProgress(levelId);
+        setCompletedSet(new Set(Object.keys(local).filter(k => local[k] === "done")));
+      }
+    };
+
+    fetchProgress();
+  }, [user, levelId, refreshKey]);
+
+  // --- SAVE PROGRESS (KE SUPABASE / LOCALSTORAGE) ---
+  const handleMarkComplete = async (lessonId: string) => {
+    // 1. Update UI Langsung Biar Gak Lemot (Optimistic Update)
+    setCompletedSet((prev) => new Set(prev).add(lessonId));
     setRefreshKey((prev) => prev + 1);
+
+    // 2. Simpan ke Database
+    if (user) {
+      try {
+        const { error } = await supabase
+          .from("user_progress")
+          .insert({ user_id: user.id, lesson_id: lessonId });
+          
+        if (error) {
+            console.error("Gagal simpan ke database:", error);
+            // Fallback
+            saveProgress(levelId!, lessonId);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    } else {
+      // Fallback
+      saveProgress(levelId!, lessonId);
+    }
   };
 
   // --- TAMPILAN LOADING ---
@@ -60,9 +112,8 @@ const LevelPage = () => {
     );
   }
 
-  const completedCount = level.subSections.filter(
-    (sub) => progressData[sub.id] === "done"
-  ).length;
+  // Hitung seberapa banyak sub-section yang ID-nya ada di dalam completedSet
+  const completedCount = level.subSections.filter((sub: any) => completedSet.has(sub.id)).length;
 
   return (
     <div className="min-h-screen">
@@ -97,7 +148,7 @@ const LevelPage = () => {
                 <div
                   className="h-full bg-green-500 transition-all duration-1000 ease-out"
                   style={{
-                    width: `${(completedCount / level.subSections.length) * 100}%`,
+                    width: `${level.subSections.length > 0 ? (completedCount / level.subSections.length) * 100 : 0}%`,
                   }}
                 />
               </div>
@@ -110,12 +161,13 @@ const LevelPage = () => {
       <section className="container mx-auto px-4 py-12">
         {level.subSections.length > 0 ? (
           <div className="space-y-6">
-            {level.subSections.map((subSection) => (
+            {level.subSections.map((subSection: any) => (
               <LessonCard
                 key={subSection.id}
                 levelId={level.id}
                 subSection={subSection}
-                onProgressUpdate={handleProgressUpdate}
+                isComplete={completedSet.has(subSection.id)} // 👈 Kirim status selesai
+                onMarkComplete={handleMarkComplete} // 👈 Kirim fungsi bapaknya
               />
             ))}
           </div>
