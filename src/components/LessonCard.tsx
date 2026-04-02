@@ -1,33 +1,26 @@
 import { useState } from "react";
-import { Check, ChevronDown, ChevronUp, BookOpen, MessageSquare, PenTool, Volume2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, BookOpen, MessageSquare, Dumbbell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
 
 interface LessonCardProps {
   levelId: string;
-  subSection: any; // Data dari Supabase
-  isComplete: boolean; // 👈 Status dikirim dari bapaknya
-  onMarkComplete: (lessonId: string) => void; // 👈 Fungsi dari bapaknya
+  subSection: any;
+  isComplete: boolean;
+  onToggleComplete: (lessonId: string, currentStatus: boolean) => void;
 }
 
-const LessonCard = ({ levelId, subSection, isComplete, onMarkComplete }: LessonCardProps) => {
+const LessonCard = ({ levelId, subSection, isComplete, onToggleComplete }: LessonCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<"vocabulary" | "dialog" | "exercise">("vocabulary");
+  
+  // Kuis murni pakai state (Tanpa LocalStorage sama sekali!)
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
   const [showResults, setShowResults] = useState(false);
-  
-  const { toast } = useToast();
 
   // --- 🛡️ DATA SANITIZER 🛡️ ---
-  const safeVocabs = Array.isArray(subSection.vocabulary) 
-    ? subSection.vocabulary 
-    : (subSection.vocabularies || []);
-
-  const safeDialogs = Array.isArray(subSection.dialogs) 
-    ? subSection.dialogs 
-    : [];
-
+  const safeVocabs = Array.isArray(subSection.vocabulary) ? subSection.vocabulary : (subSection.vocabularies || []);
+  const safeDialogs = Array.isArray(subSection.dialogs) ? subSection.dialogs : [];
   const safeExercises = Array.isArray(subSection.exercises) 
     ? subSection.exercises.map((ex: any) => ({
         ...ex,
@@ -35,30 +28,16 @@ const LessonCard = ({ levelId, subSection, isComplete, onMarkComplete }: LessonC
         correctAnswer: Number(ex.correct_answer || ex.correctAnswer || 0) 
       }))
     : [];
-  // ------------------------------------------------------------------
-
-  const handleMarkComplete = () => {
-    onMarkComplete(subSection.id); // Panggil fungsi bapaknya
-    toast({
-      title: "Selamat! 🎉",
-      description: `Sub-bab "${subSection.title}" telah ditandai selesai.`,
-    });
-  };
 
   const handleAnswerSelect = (questionIndex: number, answerIndex: number) => {
+    if (showResults) return;
     setSelectedAnswers((prev) => ({ ...prev, [questionIndex]: answerIndex }));
-  };
-
-  const checkAnswers = () => {
-    setShowResults(true);
   };
 
   const getScore = () => {
     let correct = 0;
     safeExercises.forEach((exercise: any, index: number) => {
-      if (selectedAnswers[index] === exercise.correctAnswer) {
-        correct++;
-      }
+      if (selectedAnswers[index] === exercise.correctAnswer) correct++;
     });
     return correct;
   };
@@ -66,13 +45,13 @@ const LessonCard = ({ levelId, subSection, isComplete, onMarkComplete }: LessonC
   const tabs = [
     { id: "vocabulary", label: "Kosakata", icon: BookOpen },
     { id: "dialog", label: "Dialog", icon: MessageSquare },
-    { id: "exercise", label: "Latihan", icon: Volume2 },
+    { id: "exercise", label: "Latihan", icon: Dumbbell }, 
   ] as const;
 
   return (
     <div className={cn(
       "border-4 border-foreground bg-card transition-all",
-      isComplete ? "shadow-md" : "shadow-sm hover:shadow-md"
+      isComplete ? "shadow-md border-green-500" : "shadow-sm hover:shadow-md"
     )}>
       {/* Header */}
       <button
@@ -80,12 +59,23 @@ const LessonCard = ({ levelId, subSection, isComplete, onMarkComplete }: LessonC
         className="w-full px-6 py-4 flex items-center justify-between text-left"
       >
         <div className="flex items-center gap-4">
-          <div className={cn(
-            "w-8 h-8 border-2 border-foreground flex items-center justify-center",
-            isComplete ? "bg-foreground text-background" : "bg-background"
-          )}>
+          {/* Ikon Centang - Bisa dipencet buat Uncheck! */}
+          <div 
+            onClick={(e) => {
+              if (isComplete) {
+                e.stopPropagation(); // Biar accordion gak ikutan nutup
+                onToggleComplete(subSection.id, isComplete);
+              }
+            }}
+            className={cn(
+              "w-8 h-8 border-2 border-foreground flex items-center justify-center transition-all",
+              isComplete ? "bg-green-500 text-white border-green-600 cursor-pointer hover:bg-green-600 hover:scale-105 active:scale-95" : "bg-background"
+            )}
+            title={isComplete ? "Batalkan Selesai (Uncheck)" : ""}
+          >
             {isComplete && <Check size={18} />}
           </div>
+          
           <div>
             <h3 className="font-bold text-lg">{subSection.title}</h3>
             <p className="text-sm text-muted-foreground">
@@ -99,7 +89,6 @@ const LessonCard = ({ levelId, subSection, isComplete, onMarkComplete }: LessonC
       {/* Content */}
       {isExpanded && (
         <div className="border-t-4 border-foreground">
-          {/* Tabs */}
           <div className="flex border-b-2 border-foreground overflow-x-auto">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -109,9 +98,7 @@ const LessonCard = ({ levelId, subSection, isComplete, onMarkComplete }: LessonC
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
                     "flex-1 min-w-[120px] px-4 py-3 font-medium flex items-center justify-center gap-2 transition-colors",
-                    activeTab === tab.id
-                      ? "bg-foreground text-background"
-                      : "bg-background hover:bg-accent"
+                    activeTab === tab.id ? "bg-foreground text-background" : "bg-background hover:bg-accent"
                   )}
                 >
                   <Icon size={16} />
@@ -121,35 +108,24 @@ const LessonCard = ({ levelId, subSection, isComplete, onMarkComplete }: LessonC
             })}
           </div>
 
-          {/* Tab Content */}
           <div className="p-6">
-            
-            {/* --- VOCABULARY TAB --- */}
             {activeTab === "vocabulary" && (
               <div className="grid gap-3">
-                {safeVocabs.length === 0 && <p className="text-slate-400 italic">Belum ada kosakata.</p>}
                 {safeVocabs.map((vocab: any, index: number) => (
-                  <div
-                    key={index}
-                    className="border-2 border-foreground p-4 bg-background hover:bg-accent transition-colors"
-                  >
+                  <div key={index} className="border-2 border-foreground p-4 bg-background hover:bg-accent transition-colors">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                       <span className="font-bold text-lg">{vocab.german}</span>
                       <span className="text-muted-foreground">→</span>
                       <span className="font-medium">{vocab.indonesian}</span>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-2 italic">
-                      "{vocab.example}"
-                    </p>
+                    <p className="text-sm text-muted-foreground mt-2 italic">"{vocab.example}"</p>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* --- DIALOG TAB --- */}
             {activeTab === "dialog" && (
               <div className="space-y-6">
-                {safeDialogs.length === 0 && <p className="text-slate-400 italic">Belum ada dialog.</p>}
                 {safeDialogs.map((dialog: any, index: number) => (
                   <div key={index} className="border-2 border-foreground p-4">
                     <h4 className="font-bold text-lg mb-4 bg-foreground text-background px-3 py-1 inline-block">
@@ -169,33 +145,27 @@ const LessonCard = ({ levelId, subSection, isComplete, onMarkComplete }: LessonC
               </div>
             )}
 
-            {/* --- EXERCISE TAB --- */}
             {activeTab === "exercise" && (
               <div className="space-y-6">
-                {safeExercises.length === 0 && <p className="text-slate-400 italic">Belum ada latihan.</p>}
                 {safeExercises.map((exercise: any, qIndex: number) => (
                   <div key={qIndex} className="border-2 border-foreground p-4">
-                    <p className="font-bold mb-4">
-                      {qIndex + 1}. {exercise.question}
-                    </p>
+                    <p className="font-bold mb-4">{qIndex + 1}. {exercise.question}</p>
                     <div className="grid gap-2">
-                      {/* Sekarang aman untuk di-map karena sudah dibersihkan di safeExercises */}
                       {exercise.options.map((option: string, oIndex: number) => {
                         const isSelected = selectedAnswers[qIndex] === oIndex;
                         const isCorrect = exercise.correctAnswer === oIndex;
-                        const showCorrectness = showResults && isSelected;
-                        
                         return (
                           <button
                             key={oIndex}
-                            onClick={() => !showResults && handleAnswerSelect(qIndex, oIndex)}
+                            onClick={() => handleAnswerSelect(qIndex, oIndex)}
                             disabled={showResults}
                             className={cn(
                               "text-left px-4 py-3 border-2 border-foreground transition-all",
-                              isSelected && !showResults && "bg-accent",
-                              showResults && isCorrect && "bg-foreground text-background",
-                              showCorrectness && !isCorrect && "bg-destructive text-destructive-foreground",
-                              showResults && isCorrect && !isSelected && "border-dashed"
+                              isSelected && !showResults && "bg-accent hover:bg-slate-200",
+                              !isSelected && !showResults && "hover:bg-slate-50 cursor-pointer",
+                              showResults && isCorrect && "bg-green-500 text-white border-green-700 opacity-100", 
+                              showResults && isSelected && !isCorrect && "bg-red-500 text-white border-red-700 opacity-100", 
+                              showResults && !isSelected && !isCorrect && "opacity-40 cursor-not-allowed border-slate-300" 
                             )}
                           >
                             <span className="font-mono mr-2">{String.fromCharCode(65 + oIndex)}.</span>
@@ -209,26 +179,22 @@ const LessonCard = ({ levelId, subSection, isComplete, onMarkComplete }: LessonC
 
                 <div className="flex flex-col sm:flex-row gap-4 items-center justify-between pt-4 border-t-2 border-foreground">
                   {!showResults ? (
-                    <Button
-                      onClick={checkAnswers}
-                      disabled={safeExercises.length === 0 || Object.keys(selectedAnswers).length !== safeExercises.length}
-                      className="w-full sm:w-auto"
-                    >
+                    <Button onClick={() => setShowResults(true)} disabled={safeExercises.length === 0 || Object.keys(selectedAnswers).length !== safeExercises.length} className="w-full sm:w-auto font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none transition-all">
                       Periksa Jawaban
                     </Button>
                   ) : (
-                    <div className="flex items-center gap-4">
-                      <span className="font-bold text-lg">
+                    <div className="flex items-center gap-4 w-full justify-between sm:justify-start">
+                      <div className="px-4 py-2 border-2 border-black bg-yellow-100 font-black text-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                         Skor: {getScore()}/{safeExercises.length}
-                      </span>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setSelectedAnswers({});
-                          setShowResults(false);
-                        }}
+                      </div>
+                      
+                      {/* Tombol Ulangi Kuis */}
+                      <Button 
+                        variant="outline" 
+                        onClick={() => { setSelectedAnswers({}); setShowResults(false); }}
+                        className="font-bold border-2 border-slate-300 hover:border-black hover:bg-slate-100 transition-colors"
                       >
-                        Coba Lagi
+                        Ulangi Kuis
                       </Button>
                     </div>
                   )}
@@ -236,17 +202,15 @@ const LessonCard = ({ levelId, subSection, isComplete, onMarkComplete }: LessonC
               </div>
             )}
           </div>
-
-          {/* Mark Complete Button */}
+          
+          {/* Tombol Tandai Selesai (Hanya muncul kalau belum komplit) */}
           {!isComplete && (
-            <div className="border-t-2 border-foreground p-4">
-              <Button
-                onClick={handleMarkComplete}
-                className="w-full"
-                size="lg"
+            <div className="border-t-2 border-foreground p-4 bg-slate-50">
+              <Button 
+                onClick={() => onToggleComplete(subSection.id, isComplete)} 
+                className="w-full h-12 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-none transition-all hover:bg-green-600"
               >
-                <Check size={18} className="mr-2" />
-                Tandai Selesai
+                <Check size={20} className="mr-2" /> Tandai Selesai
               </Button>
             </div>
           )}
