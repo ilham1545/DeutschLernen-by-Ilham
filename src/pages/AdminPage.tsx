@@ -10,12 +10,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { 
   Loader2, UploadCloud, FileJson, LogOut, Plus, Trash2, Edit2, 
   Layers, BookOpen, Crown, BookText, FileCode, LayoutDashboard, Database,
   Menu, X, Home, ArrowLeft, UserCircle, HelpCircle, Save, AlignLeft, List, Grid3X3, Image as ImageIcon, GraduationCap,
   ArrowUp, ArrowDown, Link as LinkIcon, RotateCcw, Search, AlertTriangle, MessageCircle, PenTool, CheckCircle2, Lightbulb, Megaphone, BellRing, MoveHorizontal,
-  Bold, Italic, Underline, Link2
+  Bold, Italic, Underline, Link2, ChevronRight, MoreHorizontal
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -24,12 +25,11 @@ import { cn } from "@/lib/utils";
 // --- TIPE DATA ---
 type Level = { id: string; title: string; description: string };
 type Lesson = { id: string; title: string; slug: string; level_id: string; order_index: number };
-// UPDATE: Tambah category
 type Vocab = { id: string; german: string; indonesian: string; example: string; lesson_id: string; category?: string }; 
 type DialogLineDB = { id?: string; speaker: string; german: string; indonesian?: string; order_index: number };
 type DialogDB = { id: string; title: string; lesson_id: string; dialog_lines?: DialogLineDB[] }; 
 type Exercise = { id: string; question: string; options: string[]; correct_answer: number; lesson_id: string };
-type CourseMaterialDB = { id: string; title: string; section_id: string; level_id: string; order_index: number; content: any; resources?: any[]; tips?: string[] };
+type CourseMaterialDB = { id: string; title: string; section_id: string; level_id: string; order_index: number; content: any; resources?: any[]; tips?: string[]; status?: string };
 type QuizHeader = { id: string; level: string; title: string };
 type QuizQuestionDB = { id: string; quiz_id: string; question: string; type: string; options: any; correct_answer: any; explanation: string; order_index: number };
 type ProgramDB = {
@@ -65,7 +65,6 @@ const AdminPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [fullName, setFullName] = useState("Admin");
 
-  // --- DATA ---
   const [levels, setLevels] = useState<Level[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [vocabs, setVocabs] = useState<Vocab[]>([]);
@@ -113,7 +112,7 @@ const AdminPage = () => {
   
   const [formData, setFormData] = useState({
     id: "", title: "", description: "", slug: "", order_index: 0,
-    german: "", indonesian: "", example: "", category: "noun", // UPDATE: Default category
+    german: "", indonesian: "", example: "", category: "noun",
     explanation: "", examples: "", 
     dialog_lines: [] as { speaker: string, german: string, indonesian: string }[],
     question: "", options: ["", "", "", ""], correct_answer_idx: "0"
@@ -123,7 +122,8 @@ const AdminPage = () => {
     id: "", title: "", section_id: "", level_id: "A1", order_index: 0,
     content: [] as any[],
     resources: [] as { title: string, url: string, type: string }[],
-    tips: "" 
+    tips: "",
+    status: "draft"
   });
 
   const [programForm, setProgramForm] = useState({
@@ -305,13 +305,12 @@ const AdminPage = () => {
   useEffect(() => { 
       if (selectedLessonId && activeMenu === "vocab") {
           setIsLoadingData(true);
-          // Panggil semua data terkait Bab yang dipilih
           fetchVocabs(selectedLessonId); 
           fetchDialogs(selectedLessonId); 
           fetchExercises(selectedLessonId);
           setIsLoadingData(false);
       } 
-  }, [selectedLessonId, activeMenu]); // <- Trigger saat Bab dipilih
+  }, [selectedLessonId, activeMenu]); 
   
   useEffect(() => {
       if (selectedQuizId) { fetchQuizQuestions(selectedQuizId); setEditingQuestion(null); setQuizQuestionText(""); setQuizExplanation(""); }
@@ -379,10 +378,11 @@ const AdminPage = () => {
               id: item.id, title: item.title, section_id: item.section_id, level_id: item.level_id, order_index: item.order_index,
               content: Array.isArray(parsedContent) ? parsedContent : [],
               resources: item.resources ? item.resources.map((r: any) => ({...r, type: r.type || 'web'})) : [],
-              tips: tipsStr
+              tips: tipsStr,
+              status: item.status || "draft"
           });
       } else {
-          setMaterialForm({ id: "", title: "", section_id: "", level_id: selectedLevelId || "A1", order_index: 0, content: [{ type: "text", content: "" }], resources: [], tips: "" });
+          setMaterialForm({ id: "", title: "", section_id: "", level_id: selectedLevelId || "A1", order_index: 0, content: [{ type: "text", content: "" }], resources: [], tips: "", status: "draft" });
       }
       setMaterialDialogOpen(true);
   };
@@ -422,7 +422,6 @@ const AdminPage = () => {
 
   const confirmDelete = (item: any, type: string) => { setItemToDelete({ id: item.id, type }); setDeleteDialogOpen(true); }
 
-  // --- DELETE FUNCTION (FIXED: STRICT ERROR HANDLING) ---
   const performDelete = async () => {
     if (!itemToDelete) return;
     const { id, type } = itemToDelete;
@@ -487,7 +486,6 @@ const AdminPage = () => {
     }
   };
 
-  // --- SAVE FUNCTION (FIXED: STRICT UPDATE CHECK + REALTIME FETCH) ---
   const handleSave = async () => {
     setIsUploading(true);
     try {
@@ -498,7 +496,6 @@ const AdminPage = () => {
 
         const vocabInput = formData.german.trim();
         
-        // Cek Duplikat
         const { data: existingVocab } = await supabase
           .from("vocabularies")
           .select("id, german, lesson_id, lessons(title)") 
@@ -512,7 +509,6 @@ const AdminPage = () => {
             return;
         }
 
-        // UPDATE: Tambah category ke payload
         const payload = { 
             german: vocabInput, 
             indonesian: formData.indonesian, 
@@ -522,7 +518,6 @@ const AdminPage = () => {
         };
         
         if (editingItem) { 
-            // FIX: Gunakan .select() untuk memastikan update berhasil
             const { data: updated, error: err } = await supabase.from("vocabularies").update(payload).eq("id", editingItem.id).select(); 
             error = err;
             if (!err && (!updated || updated.length === 0)) throw new Error("Update gagal (RLS atau ID salah).");
@@ -532,7 +527,7 @@ const AdminPage = () => {
             error = err; 
         }
         
-        if (!error) await fetchVocabs(selectedLessonId); // Force await
+        if (!error) await fetchVocabs(selectedLessonId); 
       
       } else if (formType === "dialog") {
          const payload = { title: formData.title, lesson_id: selectedLessonId };
@@ -580,7 +575,6 @@ const AdminPage = () => {
     } finally { setIsUploading(false); }
   };
 
-  // 2. SAVE MATERIAL
   const handleSaveMaterial = async () => {
       setIsUploading(true);
       try {
@@ -588,7 +582,8 @@ const AdminPage = () => {
           const payload = {
               level_id: materialForm.level_id, section_id: materialForm.section_id, title: materialForm.title,
               order_index: materialForm.order_index, content: materialForm.content, resources: materialForm.resources,
-              tips: tipsArray
+              tips: tipsArray,
+              status: materialForm.status
           };
           let error = null;
           if (editingItem) { const { error: err } = await supabase.from("course_materials").update(payload).eq("id", editingItem.id); error = err; }
@@ -599,7 +594,6 @@ const AdminPage = () => {
       } catch (err: any) { toast({ variant: "destructive", title: "Gagal Simpan", description: err.message }); } finally { setIsUploading(false); }
   };
 
-  // 3. SAVE PROGRAM
   const handleSaveProgram = async () => {
       setIsUploading(true);
       try {
@@ -625,7 +619,6 @@ const AdminPage = () => {
       } catch (err: any) { toast({ variant: "destructive", title: "Gagal Simpan Program", description: err.message }); } finally { setIsUploading(false); }
   };
 
-  // 4. SAVE ANNOUNCEMENT
   const handleSaveAnnouncement = async () => {
       setIsUploading(true);
       try {
@@ -642,7 +635,6 @@ const AdminPage = () => {
       } catch (err: any) { toast({ variant: "destructive", title: "Gagal Simpan", description: err.message }); } finally { setIsUploading(false); }
   };
 
-  // 5. SAVE QUIZ
   const handleSaveQuizQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedQuizId) { toast({ variant: "destructive", title: "Error", description: "Pilih level quiz dulu!" }); return; }
@@ -666,7 +658,6 @@ const AdminPage = () => {
     } catch (err: any) { toast({ variant: "destructive", title: "Gagal Simpan", description: err.message }); } finally { setIsUploading(false); }
   };
 
-  // --- IMPORT JSON (Dengan Placeholder Dinamis) ---
   const handleSmartImport = async () => {
     if (!jsonInput) return;
     setIsUploading(true);
@@ -690,11 +681,10 @@ const AdminPage = () => {
             }
 
             if (data.vocabulary?.length) {
-                const uniqueVocabs = data.vocabulary.filter((v: any, i: number, a: any[]) => a.findIndex(t => t.german === v.german) === i);
+                const uniqueVocabs = data.vocabulary.filter((v: any, i: number, a: any[]) => a.findIndex((t:any) => t.german === v.german) === i);
                 for (const v of uniqueVocabs) {
                     const { data: exist } = await supabase.from("vocabularies").select("id").eq("german", v.german).maybeSingle();
                     if (!exist) {
-                        // UPDATE: Tambah category saat import
                         await supabase.from("vocabularies").insert({ 
                             lesson_id: lessonId, 
                             german: v.german, 
@@ -787,7 +777,6 @@ const AdminPage = () => {
   };
 
   const getPlaceholder = () => { 
-      // UPDATE: Tambah field category di placeholder
       if (importType === "vocab") return `{\n "level_id": "A1",\n "slug": "a1-perkenalan",\n "title": "Perkenalan Diri",\n "vocabulary": [\n  {"german": "Hallo", "indonesian": "Halo", "example": "Hallo, wie geht's?", "category": "phrase"},\n  {"german": "der Tisch", "indonesian": "Meja", "example": "Das ist ein Tisch.", "category": "noun"}\n ]\n}`;
       if (importType === "material") return `{\n "level_id": "A1",\n "section_id": "a1_1_intro",\n "title": "Intro to German",\n "order_index": 1,\n "content": [\n  {"type": "text", "content": "Halo, selamat datang!"}\n ]\n}`;
       if (importType === "program") return `{\n "id": "aupair",\n "title": "Au Pair",\n "category": "general",\n "description": "Program pertukaran budaya...",\n "salary": "€280/bulan",\n "duration": "1 Tahun",\n "source": "aupair.com",\n "whatYouLearn": ["Budaya Jerman", "Bahasa Sehari-hari"],\n "requirements": [\n  {"id": "usia", "label": "Usia", "note": "18-26 Tahun"}\n ],\n "usefulLinks": [\n  {"label": "Official Info", "url": "https://...", "description": "Web resmi"}\n ]\n}`;
@@ -795,804 +784,1231 @@ const AdminPage = () => {
       return `{\n "note": "Pilih tipe data dulu..." \n}`;
   };
 
-  if (isCheckingRole) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin h-10 w-10 text-slate-800"/></div>;
-  if (!user || !isAdmin) return <div className="h-screen flex items-center justify-center">Access Denied</div>;
+  if (isCheckingRole) return <div className="h-screen flex items-center justify-center bg-[#f8f9fa]"><Loader2 className="animate-spin h-10 w-10 text-indigo-600"/></div>;
+  if (!user || !isAdmin) return <div className="h-screen flex items-center justify-center bg-[#f8f9fa] text-slate-500 font-bold">Akses Ditolak. Anda bukan Administrator.</div>;
 
   return (
-    <div className="fixed inset-0 z-[99999] flex bg-slate-50 font-sans overflow-hidden">
+    <div className="flex min-h-screen bg-[#f8f9fa] font-sans text-slate-800 overflow-hidden selection:bg-indigo-100 selection:text-indigo-900">
+      
       {/* SIDEBAR */}
-      {mobileMenuOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />}
-      <aside className={cn("fixed lg:relative z-50 h-full w-72 flex flex-col transition-transform duration-300 ease-in-out bg-white border-l lg:border-r lg:border-l-0 border-slate-200 shadow-2xl lg:shadow-none right-0 lg:left-0 lg:right-auto", mobileMenuOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0")}>
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2"><div className="bg-black text-white p-1.5 rounded"><LayoutDashboard className="w-5 h-5" /></div><span className="font-bold text-lg tracking-tight">Admin<span className="text-slate-400">Panel</span></span></div>
-              <button onClick={() => setMobileMenuOpen(false)} className="lg:hidden"><X className="w-5 h-5"/></button>
+      {mobileMenuOpen && <div className="fixed inset-0 bg-slate-900/20 z-40 lg:hidden backdrop-blur-sm transition-opacity" onClick={() => setMobileMenuOpen(false)} />}
+      <aside className={cn("fixed lg:relative z-50 h-screen w-64 bg-white transition-transform duration-300 flex flex-col shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)]", mobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0")}>
+        <div className="p-6 flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-sm"><Crown size={18}/></div>
+          <span className="text-[17px] font-extrabold tracking-tight text-slate-900">AdminPanel</span>
+          <button onClick={() => setMobileMenuOpen(false)} className="lg:hidden ml-auto text-slate-400 hover:text-slate-900"><X size={20}/></button>
+        </div>
+        <nav className="flex-1 px-4 space-y-1 overflow-y-auto pt-4 custom-scrollbar">
+          <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Main Menu</p>
+          <NavItem active={activeMenu === "dashboard"} icon={<LayoutDashboard size={18}/>} label="Dashboard" onClick={() => {setActiveMenu("dashboard"); setMobileMenuOpen(false);}} />
+          <NavItem active={activeMenu === "material"} icon={<BookText size={18}/>} label="Materi Bacaan" onClick={() => {setActiveMenu("material"); setMobileMenuOpen(false);}} />
+          <NavItem active={activeMenu === "vocab"} icon={<Database size={18}/>} label="Database Kosakata" onClick={() => {setActiveMenu("vocab"); setMobileMenuOpen(false);}} />
+          <NavItem active={activeMenu === "quiz"} icon={<HelpCircle size={18}/>} label="Quiz Editor" onClick={() => {setActiveMenu("quiz"); setMobileMenuOpen(false);}} />
+          <NavItem active={activeMenu === "program"} icon={<GraduationCap size={18}/>} label="Program Studi" onClick={() => {setActiveMenu("program"); setMobileMenuOpen(false);}} />
+          <div className="pt-8">
+            <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">System Utilities</p>
+            <NavItem active={activeMenu === "announcement"} icon={<Megaphone size={18}/>} label="Pengumuman" onClick={() => {setActiveMenu("announcement"); setMobileMenuOpen(false);}} />
+            <NavItem active={activeMenu === "import"} icon={<FileJson size={18}/>} label="Import JSON" onClick={() => {setActiveMenu("import"); setMobileMenuOpen(false);}} />
           </div>
-          <div className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
-              <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Main Menu</p>
-              <button onClick={() => {setActiveMenu("dashboard"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "dashboard" ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><Home className="w-4 h-4"/> Dashboard</button>
-              <div className="my-6 border-t border-slate-100"></div>
-              <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Content</p>
-              <button onClick={() => {setActiveMenu("vocab"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "vocab" ? "bg-blue-50 text-blue-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><Database className="w-4 h-4"/> Database Kosakata</button>
-              <button onClick={() => {setActiveMenu("material"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "material" ? "bg-green-50 text-green-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><BookText className="w-4 h-4"/> Materi Bacaan</button>
-              <button onClick={() => {setActiveMenu("quiz"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "quiz" ? "bg-yellow-50 text-yellow-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><HelpCircle className="w-4 h-4"/> Quiz Editor</button>
-              <button onClick={() => {setActiveMenu("program"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "program" ? "bg-orange-50 text-orange-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><GraduationCap className="w-4 h-4"/> Program Studi</button>
-              <div className="my-6 border-t border-slate-100"></div>
-              <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">System</p>
-              <button onClick={() => {setActiveMenu("announcement"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "announcement" ? "bg-red-50 text-red-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><Megaphone className="w-4 h-4"/> Pengumuman</button>
-              <button onClick={() => {setActiveMenu("import"); setMobileMenuOpen(false)}} className={cn("w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all", activeMenu === "import" ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")}><FileJson className="w-4 h-4"/> Import JSON</button>
+        </nav>
+        <div className="p-6">
+          <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100/50">
+             <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 overflow-hidden flex items-center justify-center text-indigo-600 font-bold shadow-sm">
+                 <UserCircle size={18}/>
+             </div>
+             <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-bold text-slate-900 truncate">{fullName}</p>
+                <p className="text-[10px] text-slate-500 font-medium truncate">Head Administrator</p>
+             </div>
+             <button onClick={() => navigate("/dashboard")} className="text-slate-400 hover:text-indigo-600 transition-colors p-1.5" title="Kembali ke Beranda"> <Home size={18}/> </button>
           </div>
-          <div className="p-4 border-t border-slate-100 bg-slate-50">
-              <button onClick={() => navigate("/")} className="w-full flex items-center gap-2 text-slate-500 hover:text-black text-sm font-medium mb-3 px-2"><ArrowLeft className="w-4 h-4"/> Kembali ke Website</button>
-              <div className="flex items-center gap-3 px-2"><div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center"><UserCircle className="w-5 h-5 text-slate-500"/></div><div className="flex-1 overflow-hidden"><p className="text-xs font-bold text-slate-900 truncate">{fullName}</p><p className="text-[10px] text-slate-500 truncate">Administrator</p></div><button onClick={() => { signOut(); navigate("/login"); }} className="text-slate-400 hover:text-red-500"><LogOut className="w-4 h-4"/></button></div>
-          </div>
+        </div>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative transition-all duration-300">
-          <div className="lg:hidden px-6 py-4 bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-40 flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-2"><div className="bg-gradient-to-tr from-purple-600 to-blue-500 p-1.5 rounded-lg"><Crown className="w-4 h-4 text-white fill-white" /></div><span className="font-black text-lg text-slate-900 tracking-tight">Admin<span className="text-purple-600">.Dash</span></span></div>
-              <button onClick={() => setMobileMenuOpen(true)} className="p-2 bg-white border border-slate-200 rounded-lg shadow-sm text-slate-600 active:scale-95 transition-transform"><Menu className="w-6 h-6"/></button>
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+        
+        {/* HEADER (Clean, no background, just padding) */}
+        <header className="px-8 lg:px-12 py-6 flex items-center justify-between shrink-0 bg-[#f8f9fa]">
+          <div className="flex items-center gap-3">
+             <button onClick={() => setMobileMenuOpen(true)} className="lg:hidden p-2 text-slate-500 hover:bg-white rounded-xl shadow-sm"><Menu size={20}/></button>
           </div>
+        </header>
 
-          <div className="flex-1 overflow-y-auto p-6 md:p-12">
-              <div className="max-w-6xl mx-auto pb-20">
-                  {/* DASHBOARD */}
-                  {activeMenu === "dashboard" && (
-                      <div className="space-y-8 animate-in fade-in duration-500">
-                          <div className="flex flex-col gap-1"><h1 className="text-3xl font-bold text-slate-900">Selamat Datang, {fullName.split(" ")[0]}.</h1><p className="text-slate-500">Ringkasan statistik konten pembelajaran.</p></div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ label: "Level Aktif", val: stats.levels, icon: Crown, color: "text-blue-600", bg: "bg-blue-50" }, { label: "Total Bab", val: stats.lessons, icon: Layers, color: "text-green-600", bg: "bg-green-50" }, { label: "Kosakata", val: stats.vocabs, icon: BookOpen, color: "text-yellow-600", bg: "bg-yellow-50" }, { label: "Pengumuman", val: stats.announcements, icon: Megaphone, color: "text-red-600", bg: "bg-red-50" },].map((item, i) => (<Card key={i} className="border-0 shadow-sm hover:shadow-md transition-shadow"><CardContent className="p-6 flex items-center gap-4"><div className={cn("p-3 rounded-xl", item.bg, item.color)}><item.icon className="w-6 h-6"/></div><div><p className="text-2xl font-bold text-slate-900">{item.val}</p><p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{item.label}</p></div></CardContent></Card>))}</div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><Card className="border-0 shadow-sm bg-gradient-to-br from-slate-900 to-slate-800 text-white"><CardContent className="p-8"><div className="mb-6"><h3 className="text-xl font-bold mb-2">Ingin menambah data massal?</h3><p className="text-slate-400 text-sm">Gunakan fitur import JSON untuk mempercepat proses input materi dan kosakata.</p></div><Button onClick={() => setActiveMenu("import")} className="bg-white text-black hover:bg-slate-200 font-bold border-0">Mulai Import JSON</Button></CardContent></Card></div>
-                      </div>
-                  )}
+        {/* PAGE BODY */}
+        <div className="flex-1 overflow-y-auto px-8 lg:px-12 pb-24 scroll-smooth custom-scrollbar">
+          <div className="max-w-[1200px] mx-auto space-y-10 animate-in fade-in duration-500">
 
-                  {/* VOCAB, DIALOG, EXERCISE MANAGER */}
-                  {activeMenu === "vocab" && (
-                      <div className="space-y-6 animate-in fade-in duration-300">
-                          <div className="flex items-center justify-between"><h2 className="text-2xl font-bold text-slate-900">Kelola Konten Per Bab</h2></div>
-                          <Card className="border shadow-sm"><CardContent className="p-6 grid md:grid-cols-2 gap-6"><div className="space-y-2"><Label className="text-xs uppercase text-slate-500 font-bold">Pilih Level</Label><Select onValueChange={(val) => setSelectedLevelId(val)}><SelectTrigger className="h-11 bg-slate-50 border-slate-200"><SelectValue placeholder="Pilih Level..." /></SelectTrigger><SelectContent>{levels.map(l => <SelectItem key={l.id} value={l.id}>{l.id} - {l.title}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label className="text-xs uppercase text-slate-500 font-bold">Pilih Bab</Label><Select disabled={!selectedLevelId} onValueChange={(val) => setSelectedLessonId(val)} value={selectedLessonId || ""}><SelectTrigger className="h-11 bg-slate-50 border-slate-200"><SelectValue placeholder={isLoadingData ? "Loading..." : "Pilih Bab..."} /></SelectTrigger><SelectContent>{lessons.map(l => <SelectItem key={l.id} value={l.id}>{l.title}</SelectItem>)}</SelectContent></Select></div></CardContent></Card>
-                          {selectedLevelId && !selectedLessonId && (<Card className="border shadow-sm"><div className="p-4 border-b flex justify-between items-center bg-slate-50/50"><h3 className="font-bold text-slate-700">Daftar Bab ({selectedLevelId})</h3><Button onClick={() => openCreateDialog("lesson")} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-bold"><Plus className="w-4 h-4 mr-1"/> Bab Baru</Button></div><Table><TableHeader><TableRow><TableHead>Index</TableHead><TableHead>Judul</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader><TableBody>{lessons.map(ls => (<TableRow key={ls.id}><TableCell className="font-bold text-slate-500">#{ls.order_index}</TableCell><TableCell className="font-medium">{ls.title}</TableCell><TableCell className="text-right space-x-2"><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditDialog(ls, "lesson")}><Edit2 className="w-4 h-4 text-slate-500"/></Button><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => confirmDelete(ls, "lesson")}><Trash2 className="w-4 h-4 text-red-500"/></Button></TableCell></TableRow>))}</TableBody></Table></Card>)}
-                          
-                          {selectedLessonId && (
-                            <div className="space-y-4">
-                                {/* SUB-TAB NAVIGATION */}
-                                <div className="flex space-x-2 overflow-x-auto pb-2">
+            {/* --- 1. DASHBOARD --- */}
+            {activeMenu === "dashboard" && (
+                <div className="space-y-10">
+                    <div className="flex flex-col gap-1">
+                        <h1 className="text-[32px] font-bold text-slate-800 tracking-tight">Overview</h1>
+                        <p className="text-slate-400 text-sm">Statistik cepat dan akses ringkas ke manajemen konten.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <StatCard 
+                            title="LEVEL BAHASA" 
+                            value="A1 - B2" 
+                            icon={<Layers className="text-indigo-600 w-5 h-5"/>}  
+                            badgeColor="bg-emerald-100 text-emerald-700"
+                            iconBg="bg-indigo-50"
+                        />
+                        <StatCard 
+                            title="TOTAL KOSAKATA" 
+                            value={stats.vocabs.toLocaleString()} 
+                            icon={<BookOpen className="text-rose-600 w-5 h-5"/>} 
+                            iconBg="bg-rose-50"
+                        />
+                        {/* The Dark Accent Card from reference */}
+                        <div className="bg-[#111827] rounded-[2rem] p-8 shadow-[0_8px_30px_rgb(0,0,0,0.08)] flex flex-col justify-between h-full">
+                            <div className="flex justify-between items-start">
+                                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-6">
+                                    <BookText className="text-white w-5 h-5"/>
+                                </div>
+                                {/* Badge untuk jumlah pengumuman */}
+                                <div className="px-3 py-1.5 rounded-xl text-[10px] font-bold bg-indigo-500/20 text-indigo-300 flex items-center gap-2">
+                                    <Megaphone size={12}/>
+                                    {stats.announcements} PENGUMUMAN DIBUAT
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">TOTAL MATERI BACAAN</p>
+                                <div className="flex items-baseline gap-2">
+                                    <p className="text-4xl font-black tracking-tight text-white">{stats.materials}</p>
+                                    <p className="text-xs font-bold text-slate-500 uppercase">Modul</p>
+                                </div>
+                                <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">System Status</span>
+                                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                        ACTIVE
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <Card className="border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] bg-white rounded-[2rem] overflow-hidden">
+                        <div className="p-8 pb-6 border-b border-slate-50">
+                            <h2 className="text-xl font-bold text-slate-800">Database Overview</h2>
+                            <p className="text-sm text-slate-400 mt-1">Quick links to content creation.</p>
+                        </div>
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div onClick={() => setActiveMenu("material")} className="p-6 rounded-2xl border border-slate-100 hover:border-indigo-100 hover:bg-indigo-50/30 transition-all cursor-pointer group flex items-center gap-4">
+                                <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform"><BookText className="text-indigo-600 w-5 h-5"/></div>
+                                <div>
+                                    <h3 className="font-bold text-slate-800 group-hover:text-indigo-600">Materi Bacaan</h3>
+                                    <p className="text-xs text-slate-400 mt-0.5">Kelola teks dan referensi</p>
+                                </div>
+                            </div>
+                            <div onClick={() => setActiveMenu("import")} className="p-6 rounded-2xl border border-slate-100 hover:border-slate-200 transition-all cursor-pointer group flex items-center gap-4 bg-slate-50/50">
+                                <div className="w-12 h-12 bg-white border border-slate-200 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform"><FileJson className="text-slate-500 w-5 h-5"/></div>
+                                <div>
+                                    <h3 className="font-bold text-slate-800">Bulk JSON Import</h3>
+                                    <p className="text-xs text-slate-400 mt-0.5">Upload data massal</p>
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+            )}
+
+            {/* --- 2. VOCAB, DIALOG, EXERCISE (Database Kosakata) --- */}
+            {activeMenu === "vocab" && (
+                <>
+                    <div className="flex flex-col gap-1 mb-10">
+                        <h1 className="text-[32px] font-bold text-slate-800 tracking-tight">Database Kosakata</h1>
+                        <p className="text-slate-400 text-sm">Kelola bab, kosakata, dialog, dan latihan soal per level.</p>
+                    </div>
+                    {!selectedLessonId ? (
+                        <>
+                            {/* LEVEL SELECTOR (CLEAN) */}
+                            <div className="mb-10">
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">Select Level to Edit</p>
+                                <div className="flex flex-wrap gap-3">
+                                    {levels.map(l => (
+                                        <button key={l.id} onClick={() => setSelectedLevelId(l.id)} className={cn("px-8 py-3.5 rounded-2xl text-sm font-bold transition-all border", selectedLevelId === l.id ? "bg-white border-indigo-600 text-indigo-600 shadow-[0_4px_20px_rgb(79,70,229,0.12)]" : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600 shadow-[0_2px_10px_rgb(0,0,0,0.02)]")}>
+                                            Level {l.id}
+                                        </button>
+                                    ))}
+                                    {levels.length > 0 && <Button variant="ghost" onClick={() => setSelectedLevelId(null)} className="h-[52px] rounded-2xl px-6 text-slate-400 hover:bg-white hover:text-slate-700">Clear</Button>}
+                                </div>
+                            </div>
+
+                            <Card className="border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white rounded-[2rem] overflow-hidden">
+                                <div className="p-8 border-b border-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-slate-800">Daftar Bab {selectedLevelId && `(${selectedLevelId})`}</h2>
+                                    </div>
+                                    {selectedLevelId && (
+                                        <Button onClick={() => openCreateDialog("lesson")} className="bg-slate-900 hover:bg-slate-800 text-white font-bold h-11 px-6 rounded-2xl shadow-sm"><Plus className="w-4 h-4 mr-2"/> Tambah Bab</Button>
+                                    )}
+                                </div>
+                                <div className="overflow-x-auto p-4">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="border-none hover:bg-transparent">
+                                                <TableHead className="font-bold text-slate-400 text-xs py-4 pl-4 uppercase tracking-wider">Topik / Bab</TableHead>
+                                                <TableHead className="font-bold text-slate-400 text-xs py-4 uppercase tracking-wider">Level</TableHead>
+                                                <TableHead className="font-bold text-slate-400 text-xs py-4 text-right pr-4 uppercase tracking-wider">Action</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {!selectedLevelId && <TableRow className="border-none"><TableCell colSpan={3} className="text-center py-20 text-slate-400 font-medium">Pilih level di atas untuk memunculkan bab.</TableCell></TableRow>}
+                                            {selectedLevelId && lessons.length === 0 && <TableRow className="border-none"><TableCell colSpan={3} className="text-center py-20 text-slate-400 font-medium">Belum ada bab untuk level ini.</TableCell></TableRow>}
+                                            {selectedLevelId && lessons.map((ls) => (
+                                                <TableRow key={ls.id} className="hover:bg-slate-50/50 border-b border-slate-50 transition-colors cursor-pointer group" onClick={() => setSelectedLessonId(ls.id)}>
+                                                    <TableCell className="py-5 pl-4">
+                                                        <div className="font-bold text-slate-800 text-base">{ls.title}</div>
+                                                        <div className="text-xs text-slate-400 mt-1 font-mono">{ls.slug} • Order #{ls.order_index}</div>
+                                                    </TableCell>
+                                                    <TableCell className="py-5">
+                                                        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 shadow-none border-none font-bold uppercase text-[10px] px-3 py-1 rounded-lg">{ls.level_id}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right pr-4 py-5" onClick={(e) => e.stopPropagation()}>
+                                                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-indigo-600 bg-white shadow-sm border border-slate-100 rounded-xl" onClick={() => setSelectedLessonId(ls.id)}><ChevronRight size={16}/></Button>
+                                                            <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-indigo-600 bg-white shadow-sm border border-slate-100 rounded-xl" onClick={() => openEditDialog(ls, "lesson")}><Edit2 size={14}/></Button>
+                                                            <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-red-500 bg-white shadow-sm border border-slate-100 rounded-xl" onClick={() => confirmDelete(ls, "lesson")}><Trash2 size={14}/></Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </Card>
+                        </>
+                    ) : (
+                        /* LESSON SELECTED VIEW */
+                        <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                            <Button variant="ghost" onClick={() => setSelectedLessonId(null)} className="mb-2 text-slate-400 hover:text-slate-800 hover:bg-white rounded-2xl px-0 h-10 font-bold"><ArrowLeft className="w-4 h-4 mr-2"/> Kembali ke Daftar Bab</Button>
+                            
+                            <div className="flex flex-col gap-1">
+                                <h2 className="text-[28px] font-bold text-slate-800 tracking-tight">{lessons.find(l => l.id === selectedLessonId)?.title}</h2>
+                                <p className="text-slate-400 text-sm">Kelola kosakata, dialog, dan latihan untuk bab ini.</p>
+                            </div>
+
+                            {/* SUB TABS NAVIGATION */}
+                            <div className="flex flex-wrap items-center justify-between gap-4 mt-8">
+                                <div className="flex gap-2 p-1.5 bg-white border border-slate-100 rounded-2xl shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
                                     {[
-                                        {id: "vocab", label: "Kosakata", icon: BookOpen},
-                                        {id: "dialog", label: "Dialog", icon: MessageCircle},
-                                        {id: "exercise", label: "Latihan", icon: HelpCircle},
+                                        {id: "vocab", label: "Kosakata"},
+                                        {id: "dialog", label: "Dialog"},
+                                        {id: "exercise", label: "Latihan Soal"},
                                     ].map((tab) => (
                                         <button 
-                                            key={tab.id}
-                                            onClick={() => setActiveVocabTab(tab.id as any)}
-                                            className={cn(
-                                                "px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all whitespace-nowrap",
-                                                activeVocabTab === tab.id ? "bg-slate-900 text-white shadow-md" : "bg-white border text-slate-500 hover:bg-slate-50"
-                                            )}
+                                            key={tab.id} onClick={() => setActiveVocabTab(tab.id as any)}
+                                            className={cn("px-6 py-2.5 rounded-xl text-sm font-bold transition-all", activeVocabTab === tab.id ? "bg-slate-100 text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-700")}
                                         >
-                                            <tab.icon className="w-4 h-4"/> {tab.label}
+                                            {tab.label}
                                         </button>
                                     ))}
                                 </div>
+                                <Button onClick={() => openCreateDialog(activeVocabTab as any)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-[46px] px-6 rounded-2xl shadow-[0_4px_14px_rgba(79,70,229,0.2)]"><Plus className="w-4 h-4 mr-2"/> Tambah {activeVocabTab === 'vocab' ? 'Kosakata' : activeVocabTab === 'dialog' ? 'Dialog' : 'Soal'}</Button>
+                            </div>
 
-                                {/* CONTENT PER SUB-TAB */}
-                                <Card className="border shadow-sm">
-                                    <div className="p-4 border-b flex justify-between items-center bg-slate-50/50">
-                                        <h3 className="font-bold text-slate-700 capitalize">Daftar {activeVocabTab}</h3>
-                                        <Button onClick={() => openCreateDialog(activeVocabTab as any)} size="sm" className="bg-green-600 hover:bg-green-700 text-white font-bold"><Plus className="w-4 h-4 mr-1"/> Tambah Data</Button>
-                                    </div>
-
-                                    {/* TABLE: VOCAB */}
-                                    {activeVocabTab === "vocab" && (
-                                        <>
-                                            <div className="p-4 border-b bg-white">
-                                                <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/><Input placeholder="Cari kata..." className="pl-9" value={vocabSearchTerm} onChange={(e) => setVocabSearchTerm(e.target.value)} /></div>
+                            <Card className="border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] bg-white rounded-[2rem] overflow-hidden mt-6">
+                                
+                                {activeVocabTab === "vocab" && (
+                                    <>
+                                        <div className="p-6 border-b border-slate-50 flex items-center">
+                                            <div className="relative flex-1 max-w-sm">
+                                                <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"/>
+                                                <Input placeholder="Cari kata (Jerman/Indo)..." className="pl-11 h-11 bg-[#f8f9fa] border-transparent focus:border-indigo-100 focus:bg-white rounded-xl text-sm" value={vocabSearchTerm} onChange={e => setVocabSearchTerm(e.target.value)} />
                                             </div>
-                                            <div className="max-h-[500px] overflow-y-auto">
-                                                <Table>
-                                                    <TableHeader><TableRow><TableHead>Jerman</TableHead><TableHead>Indonesia</TableHead><TableHead>Kategori</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
-                                                    <TableBody>
-                                                        {vocabs.filter(v => v.german.toLowerCase().includes(vocabSearchTerm.toLowerCase()) || v.indonesian.toLowerCase().includes(vocabSearchTerm.toLowerCase())).map(v => (
-                                                        <TableRow key={v.id}>
-                                                            <TableCell className="font-bold text-blue-700">{v.german}</TableCell>
-                                                            <TableCell>{v.indonesian}</TableCell>
-                                                            <TableCell>
-                                                                {/* UPDATE: Tampilkan Kategori di Tabel */}
-                                                                <span className={cn(
-                                                                    "px-2 py-1 text-[10px] font-bold uppercase rounded border",
-                                                                    v.category === 'noun' ? "bg-blue-50 text-blue-600 border-blue-200" :
-                                                                    v.category === 'verb' ? "bg-red-50 text-red-600 border-red-200" :
-                                                                    v.category === 'adjective' ? "bg-yellow-50 text-yellow-600 border-yellow-200" :
-                                                                    v.category === 'phrase' ? "bg-purple-50 text-purple-600 border-purple-200" :
-                                                                    "bg-slate-50 text-slate-600 border-slate-200"
-                                                                )}>
-                                                                    {v.category || '-'}
-                                                                </span>
-                                                            </TableCell>
-                                                            <TableCell className="text-right space-x-2"><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditDialog(v, "vocab")}><Edit2 className="w-4 h-4 text-slate-500"/></Button><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => confirmDelete(v, "vocab")}><Trash2 className="w-4 h-4 text-red-500"/></Button></TableCell>
-                                                        </TableRow>
-                                                        ))}
-                                                    </TableBody>
-                                                </Table>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {/* TABLE: DIALOG */}
-                                    {activeVocabTab === "dialog" && (
-                                        <div className="max-h-[500px] overflow-y-auto p-4 space-y-3">
-                                            {dialogs.length === 0 && <p className="text-slate-400 text-center py-4">Belum ada dialog.</p>}
-                                            {dialogs.map(d => (
-                                                <div key={d.id} className="border rounded-lg p-4 bg-white hover:border-blue-400 transition-colors relative group">
-                                                    <h4 className="font-bold text-lg mb-1 pr-24 break-words">{d.title}</h4>
-                                                    <div className="text-xs bg-slate-100 p-2 rounded font-mono line-clamp-3">
-                                                        {d.dialog_lines && d.dialog_lines.length > 0 ? (
-                                                            d.dialog_lines.map((l: any, i: number) => <div key={i}><span className="font-bold">{l.speaker}:</span> {l.german}</div>)
-                                                        ) : "No lines."}
-                                                    </div>
-                                                    <div className="absolute top-4 right-4 flex gap-2">
-                                                        <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => openEditDialog(d, "dialog")}><Edit2 className="w-3 h-3"/></Button>
-                                                        <Button size="icon" variant="outline" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => confirmDelete(d, "dialog")}><Trash2 className="w-3 h-3"/></Button>
-                                                    </div>
-                                                </div>
-                                            ))}
                                         </div>
-                                    )}
-
-                                    {/* TABLE: EXERCISE */}
-                                    {activeVocabTab === "exercise" && (
-                                        <div className="max-h-[500px] overflow-y-auto">
+                                        <div className="overflow-x-auto p-4">
                                             <Table>
-                                                <TableHeader><TableRow><TableHead>Pertanyaan</TableHead><TableHead>Jawaban Benar</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
-                                                <TableBody>
-                                                    {exercises.map(e => (
-                                                    <TableRow key={e.id}>
-                                                        <TableCell className="font-medium">{e.question}</TableCell>
-                                                        <TableCell className="text-green-600 font-bold">
-                                                            {/* Show the correct option text based on index */}
-                                                            {e.options && e.options[e.correct_answer] ? e.options[e.correct_answer] : `Index ${e.correct_answer}`}
-                                                        </TableCell>
-                                                        <TableCell className="text-right space-x-2"><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditDialog(e, "exercise")}><Edit2 className="w-4 h-4 text-slate-500"/></Button><Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => confirmDelete(e, "exercise")}><Trash2 className="w-4 h-4 text-red-500"/></Button></TableCell>
+                                                <TableHeader>
+                                                    <TableRow className="border-none hover:bg-transparent">
+                                                        <TableHead className="font-bold text-slate-400 text-xs py-4 pl-4 uppercase tracking-wider">Jerman</TableHead>
+                                                        <TableHead className="font-bold text-slate-400 text-xs py-4 uppercase tracking-wider">Arti</TableHead>
+                                                        <TableHead className="font-bold text-slate-400 text-xs py-4 uppercase tracking-wider">Kategori</TableHead>
+                                                        <TableHead className="font-bold text-slate-400 text-xs py-4 text-right pr-4 uppercase tracking-wider">Action</TableHead>
                                                     </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {isLoadingData && <TableRow className="border-none"><TableCell colSpan={4} className="text-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-300 mx-auto"/></TableCell></TableRow>}
+                                                    {!isLoadingData && vocabs.length === 0 && <TableRow className="border-none"><TableCell colSpan={4} className="text-center py-20 text-slate-400 font-medium">Belum ada kosakata.</TableCell></TableRow>}
+                                                    {!isLoadingData && vocabs.filter(v => v.german.toLowerCase().includes(vocabSearchTerm.toLowerCase()) || v.indonesian.toLowerCase().includes(vocabSearchTerm.toLowerCase())).map(v => (
+                                                        <TableRow key={v.id} className="hover:bg-slate-50/50 border-b border-slate-50 transition-colors group">
+                                                            <TableCell className="font-bold text-slate-800 text-base py-5 pl-4">{v.german}</TableCell>
+                                                            <TableCell className="text-slate-500 py-5">{v.indonesian}</TableCell>
+                                                            <TableCell className="py-5">
+                                                                <Badge variant="outline" className="text-[10px] uppercase font-bold px-3 py-1 rounded-lg border-slate-200 text-slate-500 shadow-none bg-white">{v.category || "noun"}</Badge>
+                                                            </TableCell>
+                                                            <TableCell className="text-right pr-4 py-5">
+                                                                <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-indigo-600 bg-white shadow-sm border border-slate-100 rounded-xl" onClick={() => openEditDialog(v, "vocab")}><Edit2 size={14}/></Button>
+                                                                    <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-red-500 bg-white shadow-sm border border-slate-100 rounded-xl" onClick={() => confirmDelete(v, "vocab")}><Trash2 size={14}/></Button>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
                                                     ))}
                                                 </TableBody>
                                             </Table>
                                         </div>
-                                    )}
-                                </Card>
-                            </div>
-                          )}
-                      </div>
-                  )}
+                                    </>
+                                )}
 
-                  {/* MATERIAL MANAGER */}
-                  {activeMenu === "material" && (
-                      <div className="space-y-6 animate-in fade-in duration-300">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"><h2 className="text-2xl font-bold text-slate-900">Content Management</h2><div className="flex gap-2 bg-white p-1 rounded-lg border shadow-sm">{levels.map(l => (<button key={l.id} onClick={() => { setSelectedLevelId(l.id); fetchMaterials(l.id); }} className={cn("px-4 py-1.5 rounded-md text-sm font-bold transition-all", selectedLevelId === l.id ? "bg-slate-900 text-white shadow" : "text-slate-500 hover:bg-slate-50")}>{l.id}</button>))}</div></div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                              <button onClick={() => openMaterialDialog(null)} className="h-auto min-h-[220px] rounded-xl border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50 transition-all flex flex-col items-center justify-center text-slate-400 hover:text-blue-600 gap-3 group bg-slate-50/50"><div className="p-4 bg-white shadow-sm border border-slate-200 rounded-full group-hover:scale-110 transition-transform"><Plus className="w-6 h-6"/></div><span className="font-bold text-sm">Buat Materi Baru</span></button>
-                              {materials.map((mat) => (
-                                <div key={mat.id} className="bg-white border rounded-xl p-5 hover:shadow-lg transition-all group flex flex-col h-full min-h-[220px] w-full min-w-0">
-                                    <div className="flex justify-between items-start mb-3">
-                                      <span className="px-2 py-1 bg-slate-100 text-[10px] font-mono font-bold text-slate-500 rounded border border-slate-200">{mat.section_id}</span>
-                                      <div className="flex items-center gap-1">
-                                        <span className="text-xs font-bold text-slate-300">#{mat.order_index}</span>
-                                        <div className="flex flex-col">
-                                          <Button variant="ghost" size="icon" className="h-5 w-5 p-0 hover:bg-slate-100 hover:text-blue-600" onClick={() => handleMoveMaterial(mat, 'up')} disabled={isLoadingData}><ArrowUp className="w-3 h-3"/></Button>
-                                          <Button variant="ghost" size="icon" className="h-5 w-5 p-0 hover:bg-slate-100 hover:text-blue-600" onClick={() => handleMoveMaterial(mat, 'down')} disabled={isLoadingData}><ArrowDown className="w-3 h-3"/></Button>
-                                        </div>
-                                      </div>
+                                {activeVocabTab === "dialog" && (
+                                    <div className="p-8 space-y-6 max-h-[600px] overflow-y-auto">
+                                        {isLoadingData && <div className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin text-slate-300 mx-auto"/></div>}
+                                        {!isLoadingData && dialogs.length === 0 && <p className="text-slate-400 font-medium text-center py-20">Belum ada dialog.</p>}
+                                        {!isLoadingData && dialogs.map(d => (
+                                            <div key={d.id} className="bg-white border border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] rounded-[1.5rem] p-8 relative group hover:border-slate-200 transition-colors">
+                                                <div className="absolute top-8 right-8 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Button variant="outline" size="sm" className="h-9 rounded-xl border-slate-200 text-slate-500 hover:text-indigo-600 shadow-sm font-bold" onClick={() => openEditDialog(d, "dialog")}><Edit2 className="w-3 h-3 mr-2"/> Edit</Button>
+                                                    <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl border-slate-200 text-slate-400 hover:text-red-500 shadow-sm" onClick={() => confirmDelete(d, "dialog")}><Trash2 className="w-3 h-3"/></Button>
+                                                </div>
+                                                <h4 className="font-bold text-xl text-slate-800 mb-6 pr-32">{d.title}</h4>
+                                                <div className="space-y-4 text-sm font-medium">
+                                                    {d.dialog_lines && d.dialog_lines.length > 0 ? (
+                                                        d.dialog_lines.map((l: any, i: number) => (
+                                                            <div key={i} className="flex gap-4 items-start">
+                                                                <span className="font-bold text-slate-500 bg-slate-50 w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border border-slate-100">{l.speaker}</span>
+                                                                <div className="pt-1.5">
+                                                                    <p className="text-slate-800 text-base">{l.german}</p>
+                                                                    {l.indonesian && <p className="text-slate-400 text-sm mt-1">{l.indonesian}</p>}
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    ) : <span className="text-slate-300 italic">Kosong.</span>}
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                    <h3 className="font-bold text-lg leading-snug mb-2 text-slate-800 group-hover:text-blue-600 transition-colors break-words">{mat.title}</h3>
-                                    <div className="text-xs text-slate-400 mb-4 flex-grow break-words">
-                                      {Array.isArray(mat.content) && mat.content.find((c: any) => c.type === 'text')?.content ? (
-                                        <p className="line-clamp-none whitespace-pre-wrap">{mat.content.find((c: any) => c.type === 'text').content}</p>
-                                      ) : "Tidak ada preview teks."}
-                                    </div>
-                                    <div className="mt-auto flex gap-2 pt-4 border-t border-slate-50"><Button onClick={() => openMaterialDialog(mat)} variant="outline" size="sm" className="flex-1 h-9 text-xs font-bold border-slate-200 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"><Edit2 className="w-3 h-3 mr-2"/> Edit</Button><Button onClick={() => confirmDelete(mat, "material")} variant="ghost" size="sm" className="h-9 w-9 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50"><Trash2 className="w-4 h-4"/></Button></div>
-                                </div>
-                              ))}
-                          </div>
-                      </div>
-                  )}
+                                )}
 
-                  {/* PROGRAM MANAGER */}
-                  {activeMenu === "program" && (
-                    <div className="space-y-6 animate-in fade-in duration-300">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <h2 className="text-2xl font-bold text-slate-900">Program Studi</h2>
-                            <div className="flex gap-2 bg-white p-1 rounded-lg border shadow-sm">
-                                <button onClick={() => setProgramFilter("all")} className={cn("px-4 py-1.5 rounded-md text-sm font-bold transition-all", programFilter === "all" ? "bg-orange-600 text-white shadow" : "text-slate-500 hover:bg-slate-50")}>Semua</button>
-                                <button onClick={() => setProgramFilter("general")} className={cn("px-4 py-1.5 rounded-md text-sm font-bold transition-all", programFilter === "general" ? "bg-orange-600 text-white shadow" : "text-slate-500 hover:bg-slate-50")}>Program Umum</button>
-                                <button onClick={() => setProgramFilter("ausbildung")} className={cn("px-4 py-1.5 rounded-md text-sm font-bold transition-all", programFilter === "ausbildung" ? "bg-orange-600 text-white shadow" : "text-slate-500 hover:bg-slate-50")}>Ausbildung</button>
-                            </div>
+                                {activeVocabTab === "exercise" && (
+                                    <div className="overflow-x-auto p-4">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow className="border-none hover:bg-transparent">
+                                                    <TableHead className="font-bold text-slate-400 text-xs py-4 pl-4 uppercase tracking-wider">Pertanyaan</TableHead>
+                                                    <TableHead className="font-bold text-slate-400 text-xs py-4 uppercase tracking-wider">Kunci Jawaban</TableHead>
+                                                    <TableHead className="font-bold text-slate-400 text-xs py-4 text-right pr-4 uppercase tracking-wider">Action</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {isLoadingData && <TableRow className="border-none"><TableCell colSpan={3} className="text-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-300 mx-auto"/></TableCell></TableRow>}
+                                                {!isLoadingData && exercises.length === 0 && <TableRow className="border-none"><TableCell colSpan={3} className="text-center py-20 text-slate-400 font-medium">Belum ada latihan soal.</TableCell></TableRow>}
+                                                {!isLoadingData && exercises.map(e => (
+                                                    <TableRow key={e.id} className="hover:bg-slate-50/50 border-b border-slate-50 transition-colors group">
+                                                        <TableCell className="font-bold text-slate-800 text-base py-5 pl-4 max-w-md truncate">{e.question}</TableCell>
+                                                        <TableCell className="py-5">
+                                                            <Badge className="bg-emerald-50 text-emerald-700 shadow-none border-none font-bold text-xs px-3 py-1 rounded-lg">{e.options && e.options[e.correct_answer] ? e.options[e.correct_answer] : `Opsi ${e.correct_answer}`}</Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-right pr-4 py-5">
+                                                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-indigo-600 bg-white shadow-sm border border-slate-100 rounded-xl" onClick={() => openEditDialog(e, "exercise")}><Edit2 size={14}/></Button>
+                                                                <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-red-500 bg-white shadow-sm border border-slate-100 rounded-xl" onClick={() => confirmDelete(e, "exercise")}><Trash2 size={14}/></Button>
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                )}
+                            </Card>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            <button onClick={() => openProgramDialog(null)} className="h-auto min-h-[220px] rounded-xl border-2 border-dashed border-slate-300 hover:border-orange-500 hover:bg-orange-50 transition-all flex flex-col items-center justify-center text-slate-400 hover:text-orange-600 gap-3 group bg-slate-50/50">
-                                <div className="p-4 bg-white shadow-sm border border-slate-200 rounded-full group-hover:scale-110 transition-transform"><Plus className="w-6 h-6"/></div>
-                                <span className="font-bold text-sm">Tambah Program</span>
-                            </button>
-                            {programs
-                              .filter(prog => {
-                                if (programFilter === "general") return prog.category === "general";
-                                if (programFilter === "ausbildung") return prog.category !== "general";
-                                return true;
-                              })
-                              .map((prog) => (
-                                <div key={prog.id} className="bg-white border rounded-xl p-5 hover:shadow-lg transition-all group flex flex-col h-full min-h-[220px] w-full min-w-0">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <span className="px-2 py-1 bg-slate-100 text-[10px] font-mono font-bold text-slate-500 rounded border border-slate-200 uppercase">{prog.category || "General"}</span>
-                                        <span className="text-xs font-bold text-slate-300">{prog.id}</span>
-                                    </div>
-                                    <h3 className="font-bold text-lg leading-snug mb-2 text-slate-800 group-hover:text-orange-600 transition-colors break-words">{prog.title}</h3>
-                                    <p className="text-xs text-slate-400 mb-4 line-clamp-none flex-grow break-words">{prog.description}</p>
-                                    <div className="mt-auto flex gap-2 pt-4 border-t border-slate-50">
-                                        <Button onClick={() => openProgramDialog(prog)} variant="outline" size="sm" className="flex-1 h-9 text-xs font-bold border-slate-200 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600"><Edit2 className="w-3 h-3 mr-2"/> Edit</Button>
-                                        <Button onClick={() => confirmDelete(prog, "program")} variant="ghost" size="sm" className="h-9 w-9 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50"><Trash2 className="w-4 h-4"/></Button>
-                                    </div>
-                                </div>
+                    )}
+                </>
+            )}
+
+            {/* --- 3. MATERI BACAAN --- */}
+            {activeMenu === "material" && (
+                <div className="space-y-10 animate-in fade-in duration-300">
+                    <div className="flex flex-col gap-1">
+                        <h1 className="text-[32px] font-bold text-slate-800 tracking-tight">Materi Bacaan</h1>
+                        <p className="text-slate-400 text-sm">Kelola materi teks, bacaan, dan referensi eksternal.</p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex flex-wrap gap-2">
+                            {levels.map(l => (
+                                <button key={l.id} onClick={() => { setSelectedLevelId(l.id); fetchMaterials(l.id); }} className={cn("px-6 py-2.5 rounded-2xl text-sm font-bold transition-all border", selectedLevelId === l.id ? "bg-white border-indigo-600 text-indigo-600 shadow-[0_4px_20px_rgb(79,70,229,0.12)]" : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600 shadow-[0_2px_10px_rgb(0,0,0,0.02)]")}>{l.id}</button>
                             ))}
                         </div>
+                        <Button onClick={() => openMaterialDialog(null)} className="bg-slate-900 hover:bg-slate-800 text-white font-bold h-12 px-6 rounded-2xl shadow-sm"><Plus className="w-4 h-4 mr-2"/> Buat Materi Baru</Button>
                     </div>
-                  )}
 
-                  {/* QUIZ MANAGER (UPDATED: LIST + EDITOR) */}
-                  {activeMenu === "quiz" && (
-                    <div className="space-y-6 animate-in fade-in duration-300">
-                        <h2 className="text-2xl font-bold text-slate-900">Quiz Editor</h2>
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            
-                            {/* KOLOM KIRI: LIST SOAL */}
-                            <div className="lg:col-span-1 space-y-4">
-                                <Card className="border-4 border-slate-200 shadow-sm">
-                                    <CardHeader className="bg-slate-50/50 border-b pb-4"><CardTitle className="text-lg">1. Pilih Level & Soal</CardTitle></CardHeader>
-                                    <CardContent className="pt-6 space-y-4">
-                                        <div className="space-y-2">
-                                            <Label>Level Quiz</Label>
-                                            <Select onValueChange={setSelectedQuizId} value={selectedQuizId}>
-                                                <SelectTrigger className="font-bold h-11"><SelectValue placeholder="Pilih Level..." /></SelectTrigger>
-                                                <SelectContent>{quizzes.map((q) => (<SelectItem key={q.id} value={q.id}>{q.level} - {q.title}</SelectItem>))}</SelectContent>
-                                            </Select>
-                                        </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {materials.map((mat) => (
+                            <div key={mat.id} className="bg-white border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] rounded-[2rem] p-8 flex flex-col h-full min-h-[260px] hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-shadow">
+                                <div className="flex justify-between items-start mb-6">
+                                    <div className="flex gap-2 items-center">
+                                        <Badge variant="outline" className="bg-slate-50 text-[10px] font-mono font-bold text-slate-400 border-slate-200 rounded-lg px-2 py-1">{mat.section_id}</Badge>
                                         
-                                        {/* LIST PERTANYAAN */}
-                                        {selectedQuizId && (
-                                            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-                                                <Label className="text-xs font-bold text-slate-400 uppercase">Daftar Pertanyaan ({quizQuestions.length})</Label>
-                                                <div className="flex flex-col gap-2">
-                                                    <Button variant="outline" className="justify-start text-green-600 border-green-200 hover:bg-green-50" onClick={() => {
-                                                        setEditingQuestion(null);
-                                                        setQuizQuestionText(""); setQuizExplanation(""); setQuizOptions(["","",""]); setQuizCorrectOption(""); setQuizBlankAnswer(""); setQuizReorderSentence("");
-                                                    }}>
-                                                        <Plus className="w-4 h-4 mr-2"/> Tambah Soal Baru
-                                                    </Button>
-                                                    {quizQuestions.map((q, idx) => (
-                                                        <div key={q.id} className={cn("p-3 rounded border text-left text-sm cursor-pointer hover:bg-slate-50 transition-colors group flex justify-between items-center gap-2", editingQuestion?.id === q.id ? "border-blue-500 bg-blue-50" : "border-slate-200")} onClick={() => loadQuestionForEdit(q)}>
-                                                            <div className="flex-1 line-clamp-2"><span className="font-bold mr-2 text-slate-400">#{q.order_index}</span>{q.question}</div>
-                                                            <div className="flex flex-col gap-0.5 shrink-0">
-                                                                <Button variant="ghost" size="icon" className="h-5 w-5 hover:bg-slate-200" onClick={(e) => {e.stopPropagation(); handleMoveQuizQuestion(q, 'up')}}><ArrowUp className="w-3 h-3"/></Button>
-                                                                <Button variant="ghost" size="icon" className="h-5 w-5 hover:bg-slate-200" onClick={(e) => {e.stopPropagation(); handleMoveQuizQuestion(q, 'down')}}><ArrowDown className="w-3 h-3"/></Button>
+                                        {/* Badge Status Berwarna */}
+                                        <Badge className={cn("text-[10px] font-bold uppercase px-2 py-1 rounded-lg border shadow-none",
+                                            mat.status === 'draft' && "bg-slate-100 text-slate-500 border-slate-200",
+                                            mat.status === 'review' && "bg-amber-50 text-amber-600 border-amber-200",
+                                            mat.status === 'published' && "bg-emerald-50 text-emerald-600 border-emerald-200",
+                                            mat.status === 'rejected' && "bg-red-50 text-red-600 border-red-200",
+                                            mat.status === 'archived' && "bg-slate-600 text-white border-transparent"
+                                        )}>
+                                            {mat.status || 'draft'}
+                                        </Badge>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-[10px] font-bold text-slate-300 px-2 uppercase">Urutan #{mat.order_index}</span>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 rounded-lg text-slate-300 hover:text-slate-700 hover:bg-slate-50" onClick={() => handleMoveMaterial(mat, 'up')} disabled={isLoadingData}><ArrowUp className="w-3 h-3"/></Button>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 rounded-lg text-slate-300 hover:text-slate-700 hover:bg-slate-50" onClick={() => handleMoveMaterial(mat, 'down')} disabled={isLoadingData}><ArrowDown className="w-3 h-3"/></Button>
+                                    </div>
+                                </div>
+                                <h3 className="font-bold text-xl mb-3 text-slate-800 line-clamp-2">{mat.title}</h3>
+                                <div className="text-sm text-slate-400 mb-6 flex-grow line-clamp-3">
+                                    {Array.isArray(mat.content) && mat.content.find((c: any) => c.type === 'text')?.content ? mat.content.find((c: any) => c.type === 'text').content : "Kosong."}
+                                </div>
+                                <div className="mt-auto flex gap-2">
+                                    <Button onClick={() => openMaterialDialog(mat)} variant="outline" className="flex-1 h-11 font-bold border-slate-200 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl"><Edit2 className="w-4 h-4 mr-2"/> Edit Materi</Button>
+                                    <Button onClick={() => confirmDelete(mat, "material")} variant="outline" size="icon" className="h-11 w-11 border-slate-200 text-slate-400 hover:text-red-600 hover:bg-red-50 hover:border-red-200 rounded-xl shrink-0"><Trash2 className="w-4 h-4"/></Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* --- 4. QUIZ EDITOR --- */}
+            {activeMenu === "quiz" && (
+                <div className="space-y-10 animate-in fade-in duration-300">
+                    <div className="flex flex-col gap-1">
+                        <h1 className="text-[32px] font-bold text-slate-800 tracking-tight">Quiz Editor</h1>
+                        <p className="text-slate-400 text-sm">Atur pertanyaan, opsi, dan kunci jawaban untuk kuis.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        {/* LEFT: LIST */}
+                        <div className="lg:col-span-4 space-y-6">
+                            <Card className="border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] bg-white rounded-[2rem] overflow-hidden">
+                                <CardContent className="p-8 space-y-8">
+                                    <div className="space-y-3">
+                                        <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Pilih Level Quiz</Label>
+                                        <Select onValueChange={setSelectedQuizId} value={selectedQuizId}>
+                                            <SelectTrigger className="font-bold h-12 rounded-xl bg-[#f8f9fa] border-transparent focus:border-indigo-200 focus:bg-white"><SelectValue placeholder="Pilih..." /></SelectTrigger>
+                                            <SelectContent>{quizzes.map((q) => (<SelectItem key={q.id} value={q.id} className="font-bold">{q.level} - {q.title}</SelectItem>))}</SelectContent>
+                                        </Select>
+                                    </div>
+                                    
+                                    {selectedQuizId && (
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Daftar Soal</Label>
+                                                <span className="text-xs font-bold text-slate-400">{quizQuestions.length} Soal</span>
+                                            </div>
+                                            <Button variant="outline" className="w-full justify-start text-slate-600 border-dashed border-2 hover:bg-slate-50 h-12 rounded-xl font-bold bg-white" onClick={() => {
+                                                setEditingQuestion(null); setQuizQuestionText(""); setQuizExplanation(""); setQuizOptions(["","",""]); setQuizCorrectOption(""); setQuizBlankAnswer(""); setQuizReorderSentence("");
+                                            }}>
+                                                <Plus className="w-4 h-4 mr-2"/> Tambah Soal Baru
+                                            </Button>
+                                            
+                                            <div className="flex flex-col gap-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar -mr-2">
+                                                {quizQuestions.map((q, idx) => (
+                                                    <div key={q.id} className={cn("p-4 rounded-xl transition-all cursor-pointer group flex flex-col gap-3", editingQuestion?.id === q.id ? "bg-indigo-50 border-transparent shadow-none" : "bg-white border border-slate-100 hover:border-slate-300 shadow-[0_2px_10px_rgb(0,0,0,0.02)]")} onClick={() => loadQuestionForEdit(q)}>
+                                                        <div className="flex justify-between items-start gap-2">
+                                                            <div className={cn("flex-1 text-sm line-clamp-2 leading-relaxed", editingQuestion?.id === q.id ? "font-bold text-indigo-900" : "font-medium text-slate-600")}><span className={cn("mr-2 px-1.5 py-0.5 rounded-lg text-[10px] font-bold", editingQuestion?.id === q.id ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-400")}>#{q.order_index}</span>{q.question}</div>
+                                                        </div>
+                                                        <div className="flex justify-between items-center border-t border-slate-100 pt-3">
+                                                            <Badge variant="outline" className="text-[9px] uppercase bg-transparent text-slate-400 font-bold tracking-wider border-none shadow-none px-0">{q.type.replace("-", " ")}</Badge>
+                                                            <div className="flex gap-1">
+                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-300 hover:text-slate-700" onClick={(e) => {e.stopPropagation(); handleMoveQuizQuestion(q, 'up')}}><ArrowUp className="w-3 h-3"/></Button>
+                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-300 hover:text-slate-700" onClick={(e) => {e.stopPropagation(); handleMoveQuizQuestion(q, 'down')}}><ArrowDown className="w-3 h-3"/></Button>
+                                                                <div className="w-px h-4 bg-slate-200 mx-1 self-center"></div>
+                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-300 hover:text-red-500 shrink-0" onClick={(e) => {e.stopPropagation(); confirmDelete(q, "quiz_question")}}><Trash2 className="w-3 h-3"/></Button>
                                                             </div>
-                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-300 hover:text-red-500 shrink-0" onClick={(e) => {e.stopPropagation(); confirmDelete(q, "quiz_question")}}><Trash2 className="w-3 h-3"/></Button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        {/* RIGHT: EDITOR */}
+                        <div className="lg:col-span-8">
+                            <Card className="border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] bg-white rounded-[2rem] h-fit overflow-hidden">
+                                <div className="p-8 border-b border-slate-50 flex flex-row justify-between items-center">
+                                    <h2 className="text-xl font-bold text-slate-800">{editingQuestion ? `Edit Soal #${editingQuestion.order_index}` : "Area Kerja Soal"}</h2>
+                                    {editingQuestion && <Badge className="bg-amber-100 text-amber-700 shadow-none border-none font-bold text-[10px] uppercase tracking-widest px-3 py-1 rounded-lg">Mode Edit</Badge>}
+                                </div>
+                                <CardContent className="p-8">
+                                    {!selectedQuizId ? (
+                                        <div className="text-center py-20 text-slate-400 font-medium flex flex-col items-center">
+                                            <div className="w-16 h-16 bg-[#f8f9fa] rounded-2xl flex items-center justify-center mb-4"><PenTool className="w-6 h-6 text-slate-300"/></div>
+                                            <p>Pilih Level Quiz di panel kiri untuk mulai membuat soal.</p>
+                                        </div>
+                                    ) : (
+                                        <form onSubmit={handleSaveQuizQuestion} className="space-y-8">
+                                            <div className="space-y-2">
+                                                <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Pertanyaan</Label>
+                                                <Textarea placeholder="Misal: Translate 'Apple' to German..." value={quizQuestionText} onChange={e => setQuizQuestionText(e.target.value)} required className="font-bold min-h-[120px] text-lg rounded-2xl border-transparent bg-[#f8f9fa] focus:border-indigo-200 focus:bg-white transition-colors p-5" />
+                                            </div>
+                                            
+                                            <div className="space-y-3">
+                                                <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Tipe Jawaban</Label>
+                                                <div className="flex flex-wrap gap-3">
+                                                    {["multiple-choice", "fill-blank", "reorder"].map((type) => (
+                                                        <div key={type} onClick={() => setQuizType(type as any)} className={cn("cursor-pointer px-6 py-3 rounded-2xl border-2 font-bold text-sm capitalize transition-all", quizType === type ? 'bg-white text-indigo-600 border-indigo-600 shadow-[0_4px_20px_rgb(79,70,229,0.12)]' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-300')}>
+                                                            {type.replace("-", " ")}
                                                         </div>
                                                     ))}
                                                 </div>
                                             </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            </div>
-
-                            {/* KOLOM KANAN: EDITOR FORM */}
-                            <Card className="lg:col-span-2 border-4 border-slate-200 shadow-sm h-fit">
-                                <CardHeader className="bg-slate-50/50 border-b pb-4 flex flex-row justify-between items-center">
-                                    <CardTitle className="text-lg">{editingQuestion ? `Edit Soal #${editingQuestion.order_index}` : "Input Soal Baru"}</CardTitle>
-                                    {editingQuestion && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold">Mode Edit</span>}
-                                </CardHeader>
-                                <CardContent className="pt-6">
-                                    <form onSubmit={handleSaveQuizQuestion} className="space-y-6">
-                                            <div className="space-y-2"><Label>Pertanyaan</Label><Textarea placeholder="Misal: Apa bahasa Jermannya 'Kucing'?" value={quizQuestionText} onChange={e => setQuizQuestionText(e.target.value)} required className="font-medium min-h-[80px]" /></div>
-                                            <div className="space-y-2"><Label>Tipe Soal</Label><div className="flex gap-2">{["multiple-choice", "fill-blank", "reorder"].map((type) => (<div key={type} onClick={() => setQuizType(type as any)} className={cn("cursor-pointer px-4 py-2 rounded border-2 font-bold text-sm capitalize transition-all", quizType === type ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:border-slate-400')}>{type.replace("-", " ")}</div>))}</div></div>
                                             
-                                            <div className="p-5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl space-y-4">
-                                                {quizType === "multiple-choice" && (<><Label>Pilihan Jawaban</Label>{quizOptions.map((opt, idx) => (<div key={idx} className="flex gap-2"><div className="w-10 h-10 flex items-center justify-center font-bold bg-white border rounded shrink-0">{String.fromCharCode(65 + idx)}</div><Input value={opt} onChange={(e) => {const newOpts = [...quizOptions]; newOpts[idx] = e.target.value; setQuizOptions(newOpts);}} placeholder={`Pilihan ${idx + 1}`} />{quizOptions.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => setQuizOptions(quizOptions.filter((_, i) => i !== idx))}><Trash2 className="w-4 h-4 text-red-500"/></Button>}</div>))}<Button type="button" variant="outline" size="sm" onClick={() => setQuizOptions([...quizOptions, ""])}><Plus className="w-4 h-4 mr-2"/> Tambah Pilihan</Button><div className="pt-2"><Label>Kunci Jawaban</Label><Select onValueChange={setQuizCorrectOption} value={quizCorrectOption}><SelectTrigger className="bg-white border-green-500/50"><SelectValue placeholder="Pilih yang benar..." /></SelectTrigger><SelectContent>{quizOptions.filter(o => o).map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div></>)}
-                                                {quizType === "fill-blank" && (<div className="space-y-2"><Label>Kunci Jawaban (Satu Kata)</Label><Input value={quizBlankAnswer} onChange={e => setQuizBlankAnswer(e.target.value)} placeholder="Misal: Katze" className="bg-white"/></div>)}
-                                                {quizType === "reorder" && (<div className="space-y-2"><Label>Kalimat Benar (Pisahkan koma)</Label><Textarea value={quizReorderSentence} onChange={e => setQuizReorderSentence(e.target.value)} placeholder="Misal: Ich, gehe, heute, ins, Kino" className="bg-white"/></div>)}
+                                            <div className="p-8 bg-[#f8f9fa] rounded-[2rem] space-y-6">
+                                                {quizType === "multiple-choice" && (
+                                                    <>
+                                                        <Label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">Opsi Pilihan Ganda</Label>
+                                                        <div className="space-y-3">
+                                                            {quizOptions.map((opt, idx) => (
+                                                                <div key={idx} className="flex gap-3 items-center group">
+                                                                    <div className="w-12 h-12 flex items-center justify-center font-bold bg-white border border-slate-100 rounded-xl text-slate-400 shrink-0 shadow-sm">{String.fromCharCode(65 + idx)}</div>
+                                                                    <Input value={opt} onChange={(e) => {const newOpts = [...quizOptions]; newOpts[idx] = e.target.value; setQuizOptions(newOpts);}} placeholder={`Teks opsi...`} className="h-12 rounded-xl bg-white border-slate-100 font-medium shadow-sm focus:border-indigo-200" />
+                                                                    {quizOptions.length > 2 && <Button type="button" variant="ghost" size="icon" onClick={() => setQuizOptions(quizOptions.filter((_, i) => i !== idx))} className="text-slate-300 hover:text-red-500 h-12 w-12 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-5 h-5"/></Button>}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        <Button type="button" variant="outline" className="w-full h-12 rounded-xl border-dashed border-2 text-slate-400 hover:bg-white hover:text-slate-700 font-bold mt-2" onClick={() => setQuizOptions([...quizOptions, ""])}><Plus className="w-4 h-4 mr-2"/> Tambah Opsi</Button>
+                                                        
+                                                        <div className="pt-6 mt-6 space-y-3">
+                                                            <Label className="text-[11px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-1"><CheckCircle2 size={14}/> Set Kunci Jawaban</Label>
+                                                            <Select onValueChange={setQuizCorrectOption} value={quizCorrectOption}>
+                                                                <SelectTrigger className="bg-white border-emerald-100 h-12 rounded-xl font-bold text-emerald-700 shadow-sm"><SelectValue placeholder="Pilih yang benar..." /></SelectTrigger>
+                                                                <SelectContent>{quizOptions.filter(o => o).map(o => <SelectItem key={o} value={o} className="font-bold">{o}</SelectItem>)}</SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                    </>
+                                                )}
+                                                {quizType === "fill-blank" && (
+                                                    <div className="space-y-3">
+                                                        <Label className="text-[11px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-1"><CheckCircle2 size={14}/> Jawaban Persis (1 Kata)</Label>
+                                                        <Input value={quizBlankAnswer} onChange={e => setQuizBlankAnswer(e.target.value)} placeholder="Misal: Katze" className="bg-white h-12 rounded-xl border-emerald-100 font-bold text-lg shadow-sm text-emerald-700 focus:border-emerald-300"/>
+                                                    </div>
+                                                )}
+                                                {quizType === "reorder" && (
+                                                    <div className="space-y-3">
+                                                        <Label className="text-[11px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-1"><CheckCircle2 size={14}/> Kalimat Benar (Pisahkan dgn Koma)</Label>
+                                                        <Textarea value={quizReorderSentence} onChange={e => setQuizReorderSentence(e.target.value)} placeholder="Misal: Ich, gehe, heute, ins, Kino" className="bg-white min-h-[100px] rounded-xl border-emerald-100 font-bold text-lg shadow-sm text-emerald-700 p-4 focus:border-emerald-300"/>
+                                                        <p className="text-[11px] text-slate-400 mt-2 font-medium">Sistem akan mengacak kata-kata ini secara otomatis.</p>
+                                                    </div>
+                                                )}
                                             </div>
                                             
-                                            <div className="space-y-2"><Label>Penjelasan (Opsional)</Label><Textarea value={quizExplanation} onChange={e => setQuizExplanation(e.target.value)} placeholder="Kenapa jawabannya itu?"/></div>
-                                            
-                                            <div className="flex gap-3">
-                                                {editingQuestion && <Button type="button" variant="outline" className="flex-1" onClick={() => {setEditingQuestion(null); setQuizQuestionText(""); setQuizExplanation("");}}>Batal Edit</Button>}
-                                                <Button type="submit" disabled={isUploading} className="flex-1 h-12 font-bold text-lg bg-green-600 hover:bg-green-700 text-white">{isUploading ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2"/>} {editingQuestion ? "Update Soal" : "Simpan Soal"}</Button>
+                                            <div className="space-y-3">
+                                                <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1"><Lightbulb size={14}/> Penjelasan (Opsional)</Label>
+                                                <Textarea value={quizExplanation} onChange={e => setQuizExplanation(e.target.value)} placeholder="Jelaskan mengapa jawaban ini benar..." className="min-h-[100px] rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200 p-5 font-medium"/>
                                             </div>
-                                    </form>
+                                            
+                                            <div className="flex gap-4 pt-6">
+                                                {editingQuestion && <Button type="button" variant="outline" className="flex-1 h-14 rounded-2xl font-bold border-slate-200 text-slate-500" onClick={() => {setEditingQuestion(null); setQuizQuestionText(""); setQuizExplanation("");}}>Batal Edit</Button>}
+                                                <Button type="submit" disabled={isUploading} className="flex-2 w-full h-14 font-bold text-base bg-slate-900 hover:bg-slate-800 text-white rounded-2xl shadow-sm">{isUploading ? <Loader2 className="animate-spin mr-2"/> : "Simpan Soal"}</Button>
+                                            </div>
+                                        </form>
+                                    )}
                                 </CardContent>
                             </Card>
                         </div>
                     </div>
-                  )}
+                </div>
+            )}
 
-                  {/* IMPORT MANAGER */}
-                  {activeMenu === "import" && (
-                      <div className="space-y-6 animate-in fade-in duration-300">
-                          <h2 className="text-2xl font-bold text-slate-900">Import JSON</h2>
-                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                              <Card className="lg:col-span-1 border-0 shadow-sm h-fit"><CardContent className="p-6 space-y-4"><div className="space-y-2"><Label className="text-xs font-bold uppercase text-slate-500">Tipe Data</Label><Select value={importType} onValueChange={(val: any) => setImportType(val)}><SelectTrigger className="font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="vocab">KOSAKATA</SelectItem><SelectItem value="material">MATERI</SelectItem><SelectItem value="quiz">QUIZ / SOAL</SelectItem><SelectItem value="program">PROGRAM STUDI</SelectItem></SelectContent></Select></div><div className="bg-slate-50 p-4 rounded-lg border text-xs font-mono text-slate-600 overflow-auto max-h-[400px]"><p className="font-bold mb-2 text-slate-400">Template:</p><pre className="whitespace-pre-wrap break-words">{getPlaceholder()}</pre></div></CardContent></Card>
-                              <Card className="lg:col-span-2 border-0 shadow-sm flex flex-col"><CardHeader className="border-b bg-slate-50/50"><CardTitle className="text-base font-bold flex items-center gap-2"><FileCode className="w-4 h-4"/> Editor</CardTitle></CardHeader><CardContent className="p-0 flex-1 flex flex-col"><Textarea className="flex-1 min-h-[400px] border-0 rounded-none p-6 font-mono text-xs focus-visible:ring-0 bg-white" placeholder="// Paste JSON di sini..." value={jsonInput} onChange={(e) => setJsonInput(e.target.value)} spellCheck={false} /><div className="p-4 border-t bg-slate-50 flex justify-end"><Button onClick={handleSmartImport} disabled={isUploading || !jsonInput} className="font-bold bg-black text-white hover:bg-slate-800">{isUploading ? <Loader2 className="animate-spin w-4 h-4 mr-2"/> : <UploadCloud className="w-4 h-4 mr-2"/>} Proses Import</Button></div></CardContent></Card>
-                          </div>
-                      </div>
-                  )}
+            {/* --- 5. PROGRAM STUDI --- */}
+            {activeMenu === "program" && (
+                <div className="space-y-10 animate-in fade-in duration-300">
+                    <div className="flex flex-col gap-1">
+                        <h1 className="text-[32px] font-bold text-slate-800 tracking-tight">Program Studi</h1>
+                        <p className="text-slate-400 text-sm">Kelola program Ausbildung, Au Pair, Studi, dll.</p>
+                    </div>
 
-                  {/* ANNOUNCEMENT MANAGER */}
-                  {activeMenu === "announcement" && (
-                    <div className="space-y-6 animate-in fade-in duration-300">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <h2 className="text-2xl font-bold text-slate-900">Pengumuman System</h2>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {/* Tombol Tambah */}
-                        <button onClick={() => openAnnouncementDialog(null)} className="h-auto min-h-[200px] rounded-xl border-2 border-dashed border-slate-300 hover:border-red-500 hover:bg-red-50 transition-all flex flex-col items-center justify-center text-slate-400 hover:text-red-600 gap-3 group bg-slate-50/50">
-                          <div className="p-4 bg-white shadow-sm border border-slate-200 rounded-full group-hover:scale-110 transition-transform"><Plus className="w-6 h-6"/></div>
-                          <span className="font-bold text-sm">Buat Pengumuman</span>
+                    <div className="flex flex-wrap items-center justify-between gap-4 mt-8">
+                        <div className="flex flex-wrap gap-2">
+                            <button onClick={() => setProgramFilter("all")} className={cn("px-6 py-2.5 rounded-2xl text-sm font-bold transition-all border", programFilter === "all" ? "bg-white border-indigo-600 text-indigo-600 shadow-[0_4px_20px_rgb(79,70,229,0.12)]" : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600 shadow-[0_2px_10px_rgb(0,0,0,0.02)]")}>Semua</button>
+                            <button onClick={() => setProgramFilter("general")} className={cn("px-6 py-2.5 rounded-2xl text-sm font-bold transition-all border", programFilter === "general" ? "bg-white border-indigo-600 text-indigo-600 shadow-[0_4px_20px_rgb(79,70,229,0.12)]" : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600 shadow-[0_2px_10px_rgb(0,0,0,0.02)]")}>Umum</button>
+                            <button onClick={() => setProgramFilter("ausbildung")} className={cn("px-6 py-2.5 rounded-2xl text-sm font-bold transition-all border", programFilter === "ausbildung" ? "bg-white border-indigo-600 text-indigo-600 shadow-[0_4px_20px_rgb(79,70,229,0.12)]" : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600 shadow-[0_2px_10px_rgb(0,0,0,0.02)]")}>Ausbildung</button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <button onClick={() => openProgramDialog(null)} className="h-auto min-h-[260px] rounded-[2rem] border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-white transition-all flex flex-col items-center justify-center text-slate-400 hover:text-indigo-600 gap-4 group">
+                            <div className="w-16 h-16 bg-white shadow-sm border border-slate-100 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform"><Plus className="w-6 h-6"/></div>
+                            <span className="font-bold">Tambah Program</span>
+                        </button>
+                        
+                        {programs.filter(prog => {
+                            if (programFilter === "general") return prog.category === "general";
+                            if (programFilter === "ausbildung") return prog.category !== "general";
+                            return true;
+                        }).map((prog) => (
+                            <div key={prog.id} className="bg-white border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] rounded-[2rem] p-8 flex flex-col h-full min-h-[260px] relative overflow-hidden hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-shadow">
+                                <div className="flex justify-between items-start mb-6">
+                                    <Badge className="bg-slate-50 text-slate-600 border border-slate-200 shadow-none font-bold uppercase text-[10px] px-3 py-1.5 rounded-lg">{prog.category || "General"}</Badge>
+                                    <code className="text-[10px] font-mono font-bold text-slate-300">{prog.id}</code>
+                                </div>
+                                <h3 className="font-bold text-xl mb-3 text-slate-800 line-clamp-2">{prog.title}</h3>
+                                <p className="text-sm text-slate-400 mb-6 flex-grow line-clamp-3 font-medium">{prog.description}</p>
+                                
+                                <div className="grid grid-cols-2 gap-3 mb-6">
+                                    <div className="bg-[#f8f9fa] p-3 rounded-xl">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Gaji</p>
+                                        <p className="text-xs font-bold text-slate-700 truncate">{prog.salary || "-"}</p>
+                                    </div>
+                                    <div className="bg-[#f8f9fa] p-3 rounded-xl">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Durasi</p>
+                                        <p className="text-xs font-bold text-slate-700 truncate">{prog.duration || "-"}</p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-auto flex gap-2">
+                                    <Button onClick={() => openProgramDialog(prog)} variant="outline" className="flex-1 h-11 font-bold border-slate-200 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl"><Edit2 className="w-4 h-4 mr-2"/> Edit</Button>
+                                    <Button onClick={() => confirmDelete(prog, "program")} variant="outline" size="icon" className="h-11 w-11 border-slate-200 text-slate-400 hover:text-red-600 hover:bg-red-50 hover:border-red-200 rounded-xl shrink-0"><Trash2 className="w-4 h-4"/></Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* --- 6. PENGUMUMAN --- */}
+            {activeMenu === "announcement" && (
+                <div className="space-y-10 animate-in fade-in duration-300">
+                    <div className="flex flex-col gap-1">
+                        <h1 className="text-[32px] font-bold text-slate-800 tracking-tight">Pengumuman</h1>
+                        <p className="text-slate-400 text-sm">Buat pop-up atau banner berjalan untuk users.</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <button onClick={() => openAnnouncementDialog(null)} className="h-auto min-h-[220px] rounded-[2rem] border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-white transition-all flex flex-col items-center justify-center text-slate-400 hover:text-indigo-600 gap-4 group">
+                            <div className="w-16 h-16 bg-white shadow-sm border border-slate-100 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform"><Plus className="w-6 h-6"/></div>
+                            <span className="font-bold">Buat Baru</span>
                         </button>
 
-                        {/* List Pengumuman */}
                         {announcements.map((ann) => (
-                          <div key={ann.id} className="bg-white border rounded-xl p-5 hover:shadow-lg transition-all group flex flex-col h-full min-h-[200px] relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                              <Megaphone className="w-24 h-24 text-red-600 -rotate-12" />
-                            </div>
-                            
-                            <div className="flex justify-between items-start mb-3 relative z-10">
-                              <div className="flex gap-2">
-                                <span className={cn("px-2 py-1 text-[10px] font-bold rounded border uppercase flex items-center gap-1", ann.type === 'popup' ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
-                                  {ann.type === 'popup' ? <BellRing className="w-3 h-3"/> : <MoveHorizontal className="w-3 h-3"/>}
-                                  {ann.type}
-                                </span>
-                                <span className={cn("px-2 py-1 text-[10px] font-bold rounded border uppercase flex items-center gap-1", ann.is_active ? "bg-green-50 text-green-700 border-green-200" : "bg-slate-100 text-slate-500 border-slate-200")}>
-                                  {ann.is_active ? <CheckCircle2 className="w-3 h-3"/> : <LogOut className="w-3 h-3"/>}
-                                  {ann.is_active ? "Aktif" : "Non-Aktif"}
-                                </span>
-                              </div>
-                            </div>
+                            <div key={ann.id} className="bg-white border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] rounded-[2rem] p-8 flex flex-col h-full min-h-[220px] relative hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-shadow">
+                                <div className="flex justify-between items-start mb-6">
+                                    <div className="flex gap-2">
+                                        <Badge variant="outline" className={cn("font-bold uppercase text-[9px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-none border", ann.type === 'popup' ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-sky-50 text-sky-700 border-sky-100")}>
+                                            {ann.type === 'popup' ? <BellRing className="w-3 h-3"/> : <MoveHorizontal className="w-3 h-3"/>} {ann.type}
+                                        </Badge>
+                                        <Badge variant="outline" className={cn("font-bold uppercase text-[9px] px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-none border", ann.is_active ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-slate-50 text-slate-400 border-slate-200")}>
+                                            {ann.is_active ? <CheckCircle2 className="w-3 h-3"/> : <LogOut className="w-3 h-3"/>} {ann.is_active ? "Aktif" : "Draft"}
+                                        </Badge>
+                                    </div>
+                                </div>
 
-                            <h3 className="font-bold text-lg leading-snug mb-2 text-slate-800 group-hover:text-red-600 transition-colors relative z-10 line-clamp-2">{ann.title}</h3>
-                            
-                            <div className="text-xs text-slate-500 mb-4 flex-grow relative z-10">
-                              {Array.isArray(ann.content) && ann.content.length > 0 
-                                ? `${ann.content.length} Blok Konten` 
-                                : "Tidak ada konten"}
-                              <br/>
-                              <span className="text-[10px] text-slate-400">ID: {ann.id.substring(0,8)}...</span>
-                            </div>
+                                <h3 className="font-bold text-xl mb-3 text-slate-800 line-clamp-2">{ann.title}</h3>
+                                
+                                <div className="text-sm text-slate-400 mb-6 flex-grow font-medium">
+                                    {Array.isArray(ann.content) && ann.content.length > 0 ? `${ann.content.length} Blok Konten` : "Kosong"}
+                                </div>
 
-                            <div className="mt-auto flex gap-2 pt-4 border-t border-slate-50 relative z-10">
-                              <Button onClick={() => openAnnouncementDialog(ann)} variant="outline" size="sm" className="flex-1 h-9 text-xs font-bold border-slate-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600">
-                                <Edit2 className="w-3 h-3 mr-2"/> Edit
-                              </Button>
-                              <Button onClick={() => confirmDelete(ann, "announcement")} variant="ghost" size="sm" className="h-9 w-9 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50">
-                                <Trash2 className="w-4 h-4"/>
-                              </Button>
+                                <div className="mt-auto flex gap-2">
+                                    <Button onClick={() => openAnnouncementDialog(ann)} variant="outline" className="flex-1 h-11 font-bold border-slate-200 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl"><Edit2 className="w-4 h-4 mr-2"/> Edit</Button>
+                                    <Button onClick={() => confirmDelete(ann, "announcement")} variant="outline" size="icon" className="h-11 w-11 border-slate-200 text-slate-400 hover:text-red-600 hover:bg-red-50 hover:border-red-200 rounded-xl shrink-0"><Trash2 className="w-4 h-4"/></Button>
+                                </div>
                             </div>
-                          </div>
                         ))}
-                      </div>
                     </div>
-                  )}
-              </div>
+                </div>
+            )}
+
+            {/* --- 7. IMPORT JSON --- */}
+            {activeMenu === "import" && (
+                <div className="space-y-10 animate-in fade-in duration-300">
+                    <div className="flex flex-col gap-1">
+                        <h1 className="text-[32px] font-bold text-slate-800 tracking-tight">Import JSON</h1>
+                        <p className="text-slate-400 text-sm">Upload data massal melalui format JSON baku.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <Card className="lg:col-span-1 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] bg-white rounded-[2rem] h-fit">
+                            <div className="p-8 border-b border-slate-50">
+                                <h2 className="text-xl font-bold text-slate-800">Target Import</h2>
+                            </div>
+                            <CardContent className="p-8 space-y-8">
+                                <div className="space-y-3">
+                                    <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Tipe Data</Label>
+                                    <Select value={importType} onValueChange={(val: any) => setImportType(val)}>
+                                        <SelectTrigger className="font-bold h-12 rounded-xl bg-[#f8f9fa] border-transparent focus:border-indigo-200 focus:bg-white"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="vocab" className="font-bold">Kosakata & Bab</SelectItem>
+                                            <SelectItem value="material" className="font-bold">Materi Bacaan</SelectItem>
+                                            <SelectItem value="quiz" className="font-bold">Quiz / Soal</SelectItem>
+                                            <SelectItem value="program" className="font-bold">Program Studi</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-3">
+                                    <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Format Wajib (Template)</Label>
+                                    <div className="bg-slate-900 p-6 rounded-2xl text-xs font-mono text-emerald-400 overflow-auto max-h-[300px] custom-scrollbar shadow-inner">
+                                        <pre className="whitespace-pre-wrap break-words">{getPlaceholder()}</pre>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="lg:col-span-2 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] bg-white rounded-[2rem] flex flex-col overflow-hidden h-fit">
+                            <div className="p-8 border-b border-slate-50">
+                                <h2 className="text-xl font-bold text-slate-800">JSON Editor</h2>
+                            </div>
+                            <CardContent className="p-0 flex-1 flex flex-col">
+                                <Textarea className="flex-1 min-h-[400px] lg:min-h-[500px] border-0 rounded-none p-8 font-mono text-[13px] focus-visible:ring-0 bg-transparent resize-none leading-relaxed" placeholder="// Paste JSON-mu di sini..." value={jsonInput} onChange={(e) => setJsonInput(e.target.value)} spellCheck={false} />
+                                <div className="p-8 border-t border-slate-50 bg-[#f8f9fa] flex justify-end">
+                                    <Button onClick={handleSmartImport} disabled={isUploading || !jsonInput} className="font-bold bg-slate-900 text-white hover:bg-slate-800 h-12 px-8 rounded-xl w-full sm:w-auto shadow-sm">
+                                        {isUploading ? <Loader2 className="animate-spin w-5 h-5 mr-2"/> : <UploadCloud className="w-5 h-5 mr-2"/>} Eksekusi Import
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+            )}
+            
           </div>
+        </div>
       </main>
 
-      {/* --- CUSTOM DELETE CONFIRMATION DIALOG --- */}
+      {/* --- ALL DIALOGS (MODALS) --- */}
+
+      {/* 1. DELETE DIALOG */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-         <DialogContent className="max-w-[90vw] sm:max-w-sm rounded-2xl p-6">
-            <DialogHeader className="flex flex-col items-center gap-2 text-center pb-2">
-                <div className="p-3 bg-red-100 rounded-full text-red-600"><AlertTriangle className="w-8 h-8" /></div>
-                <DialogTitle className="text-xl">Yakin hapus data ini?</DialogTitle>
-                <DialogDescription>Data yang dihapus tidak bisa dikembalikan lagi.</DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="flex flex-row justify-center gap-2 pt-2">
-                <Button variant="outline" className="flex-1" onClick={() => setDeleteDialogOpen(false)}>Batal</Button>
-                <Button variant="destructive" className="flex-1" onClick={performDelete} disabled={isUploading}>{isUploading ? <Loader2 className="w-4 h-4 animate-spin"/> : "Ya, Hapus"}</Button>
+         <DialogContent className="max-w-xs rounded-[2rem] p-8 border border-slate-100 shadow-[0_20px_60px_rgb(0,0,0,0.08)] bg-white">
+            <div className="flex flex-col items-center text-center gap-5 py-4">
+                <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center animate-pulse"><AlertTriangle size={32} strokeWidth={2}/></div>
+                <div className="space-y-1.5">
+                  <DialogTitle className="text-xl font-bold text-slate-800">Hapus Data?</DialogTitle>
+                  <DialogDescription className="text-sm font-medium text-slate-400">Data tidak bisa dikembalikan lagi.</DialogDescription>
+                </div>
+            </div>
+            <DialogFooter className="flex flex-col gap-2 p-0 sm:flex-col">
+                <Button variant="destructive" className="w-full h-12 rounded-xl font-bold bg-red-500 hover:bg-red-600 shadow-sm" onClick={performDelete} disabled={isUploading}>{isUploading ? <Loader2 className="w-5 h-5 animate-spin"/> : "Ya, Hapus"}</Button>
+                <Button variant="ghost" className="w-full h-12 rounded-xl font-bold text-slate-400 hover:text-slate-700" onClick={() => setDeleteDialogOpen(false)}>Batal</Button>
             </DialogFooter>
          </DialogContent>
       </Dialog>
 
-      {/* --- ANNOUNCEMENT EDITOR DIALOG --- */}
-      <Dialog open={announcementDialogOpen} onOpenChange={setAnnouncementDialogOpen}>
-          <DialogContent className="max-w-[95vw] w-full h-auto max-h-[85dvh] flex flex-col p-0 overflow-hidden rounded-2xl border-0 shadow-2xl bg-white my-4">
-              <DialogHeader className="px-6 py-4 border-b flex flex-row items-center justify-between bg-slate-50/50 shrink-0">
-                  <DialogTitle className="flex items-center gap-2"><Megaphone className="w-5 h-5 text-red-600"/> Editor Pengumuman</DialogTitle>
-                  <DialogDescription className="hidden">..</DialogDescription>
-              </DialogHeader>
-              <div className="flex-1 flex flex-col md:flex-row overflow-y-auto">
-                  <div className="w-full md:w-80 bg-white p-6 border-b md:border-b-0 md:border-r space-y-4 shrink-0">
-                      <div className="space-y-1"><Label className="text-xs font-bold">Judul Pengumuman</Label><Input value={announcementForm.title} onChange={e => setAnnouncementForm({...announcementForm, title: e.target.value})} className="font-bold" placeholder="Contoh: Maintenance Server"/></div>
-                      
-                      <div className="space-y-1">
-                          <Label className="text-xs font-bold">Tipe Tampilan</Label>
-                          <Select value={announcementForm.type} onValueChange={(val: any) => setAnnouncementForm({...announcementForm, type: val})}>
-                              <SelectTrigger><SelectValue/></SelectTrigger>
+      {/* 2. GENERAL EDIT DIALOG (VOCAB, LESSON, DIALOG, EXERCISE) */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-md h-auto p-0 overflow-hidden border border-slate-100 shadow-[0_20px_60px_rgb(0,0,0,0.08)] rounded-[2rem] bg-white max-h-[85vh] flex flex-col">
+            <DialogHeader className="p-8 border-b border-slate-50 flex-row items-center justify-between shrink-0">
+                <DialogTitle className="text-xl font-bold text-slate-800">{editingItem ? "Edit Data" : "Tambah Baru"}</DialogTitle>
+                <Badge className="bg-[#f8f9fa] text-slate-400 font-bold text-[10px] uppercase border-none tracking-widest px-3 py-1 rounded-lg">{formType}</Badge>
+            </DialogHeader>
+            <div className="p-8 space-y-8 overflow-y-auto custom-scrollbar flex-1">
+                {formType === "vocab" && (
+                  <div className="space-y-5">
+                      <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Kata Jerman</Label><Input value={formData.german} onChange={e => setFormData({...formData, german: e.target.value})} className="h-12 font-bold rounded-xl border-transparent bg-[#f8f9fa] focus:border-indigo-200 focus:bg-white" placeholder="Contoh: der Apfel"/></div>
+                      <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Arti Indonesia</Label><Input value={formData.indonesian} onChange={e => setFormData({...formData, indonesian: e.target.value})} className="h-12 font-bold rounded-xl border-transparent bg-[#f8f9fa] focus:border-indigo-200 focus:bg-white" placeholder="Contoh: Apel"/></div>
+                      <div className="space-y-2">
+                          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Kategori</Label>
+                          <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val})}>
+                              <SelectTrigger className="h-12 font-bold rounded-xl border-transparent bg-[#f8f9fa] focus:border-indigo-200 focus:bg-white"><SelectValue placeholder="Pilih..."/></SelectTrigger>
                               <SelectContent>
-                                  <SelectItem value="popup"><span className="flex items-center gap-2"><BellRing className="w-3 h-3"/> Pop-up Modal</span></SelectItem>
-                                  <SelectItem value="marquee"><span className="flex items-center gap-2"><MoveHorizontal className="w-3 h-3"/> Teks Berjalan</span></SelectItem>
+                                  <SelectItem value="noun" className="font-bold">Nomen (Kata Benda)</SelectItem>
+                                  <SelectItem value="verb" className="font-bold">Verb (Kata Kerja)</SelectItem>
+                                  <SelectItem value="adjective" className="font-bold">Adjektiv (Kata Sifat)</SelectItem>
+                                  <SelectItem value="phrase" className="font-bold">Frasa</SelectItem>
+                                  <SelectItem value="adverb" className="font-bold">Adverb</SelectItem>
+                                  <SelectItem value="other" className="font-bold">Lainnya</SelectItem>
                               </SelectContent>
                           </Select>
                       </div>
-
-                      {announcementForm.type === 'marquee' && (
-                          <div className="space-y-1">
-                              <Label className="text-xs font-bold">Arah Gerak</Label>
-                              <div className="flex gap-2">
-                                  <Button size="sm" variant={announcementForm.direction === 'left' ? "default" : "outline"} onClick={() => setAnnouncementForm({...announcementForm, direction: 'left'})} className="flex-1"><ArrowLeft className="w-4 h-4 mr-1"/> Ke Kiri</Button>
-                                  <Button size="sm" variant={announcementForm.direction === 'right' ? "default" : "outline"} onClick={() => setAnnouncementForm({...announcementForm, direction: 'right'})} className="flex-1">Ke Kanan <ArrowLeft className="w-4 h-4 ml-1 rotate-180"/></Button>
-                              </div>
-                          </div>
-                      )}
-
-                      <div className="flex items-center justify-between border p-3 rounded-lg bg-white shadow-none">
-                          <Label className="text-xs font-bold">Status Aktif</Label>
-                          <Switch className="shadow-none border-none focus-visible:ring-0 data-[state=checked]:bg-green-600 [&_span]:shadow-none" checked={announcementForm.is_active} onCheckedChange={(chk) => setAnnouncementForm({...announcementForm, is_active: chk})} />
-                      </div>
+                      <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Contoh Kalimat</Label><Textarea value={formData.example} onChange={e => setFormData({...formData, example: e.target.value})} className="min-h-[100px] border-transparent bg-[#f8f9fa] focus:border-indigo-200 focus:bg-white rounded-xl font-medium p-4" placeholder="Ich esse den Apfel..."/></div>
                   </div>
-
-                  <div className="flex-1 bg-slate-50 p-4 md:p-6 flex flex-col gap-4">
-                      {announcementForm.content.length === 0 && <div className="text-center text-slate-400 py-10 font-medium border-2 border-dashed rounded-xl flex flex-col items-center justify-center h-40"><p>Belum ada konten.</p><p className="text-xs mt-1">Klik tombol di bawah untuk menambah isi pengumuman.</p></div>}
-                      {announcementForm.content.map((block, idx) => (
-                          <div key={idx} className="bg-white border rounded-xl p-4 shadow-sm relative group animate-in slide-in-from-bottom-2 duration-300">
-                              <div className="flex justify-between items-center mb-2"><span className="text-[10px] uppercase font-bold bg-slate-100 px-2 py-1 rounded text-slate-500 select-none cursor-default">{block.type}</span><Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500 hover:bg-red-50" onClick={() => removeAnnounceBlock(idx)}><Trash2 className="w-4 h-4"/></Button></div>
-                              
-                              {/* --- RICH TEXT TOOLBAR --- */}
-                              {block.type === 'text' && (
-                                  <>
-                                    <div className="flex gap-1 mb-2 border-b pb-2">
-                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => formatAnnounceText(idx, 'b', block.content)}><Bold className="w-3 h-3"/></Button>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => formatAnnounceText(idx, 'i', block.content)}><Italic className="w-3 h-3"/></Button>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => formatAnnounceText(idx, 'u', block.content)}><Underline className="w-3 h-3"/></Button>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => formatAnnounceText(idx, 'a', block.content)}><Link2 className="w-3 h-3"/></Button>
-                                    </div>
-                                    <Label className="text-[10px] text-slate-400 mb-1 block">Teks (Support HTML)</Label>
-                                    <Textarea id={`announce-text-${idx}`} value={block.content} onChange={(e) => updateAnnounceBlock(idx, "content", e.target.value)} placeholder="Tulis isi pengumuman..." className="min-h-[100px]" />
-                                  </>
-                              )}
-                              
-                              {block.type === 'list' && (<div className="space-y-1"><Label className="text-[10px] text-slate-400 mb-1 block">List Item (Pisahkan dengan Enter)</Label><Textarea value={block.items?.join("\n")} onChange={(e) => updateAnnounceBlock(idx, "items_raw", e.target.value)} placeholder="• Poin 1&#10;• Poin 2" className="min-h-[100px] bg-slate-50" /></div>)}
-                              {block.type === 'image' && (<div className="space-y-3"><Label className="text-[10px] text-slate-400 block">Link Gambar</Label><Input value={block.src} onChange={(e) => updateAnnounceBlock(idx, "src", e.target.value)} placeholder="https://..." /></div>)}
-                              {block.type === 'table' && (<div className="space-y-2"><Label className="text-[10px] text-slate-400 block">Format CSV</Label><Textarea defaultValue={getTableAsCSV(block)} onBlur={(e) => updateAnnounceBlock(idx, "csv_raw", e.target.value)} placeholder="Kolom A, Kolom B&#10;Data 1, Data 2" className="min-h-[100px] font-mono text-xs bg-slate-50" /></div>)}
-                          </div>
-                      ))}
-
-                      <div className="grid grid-cols-2 sm:flex gap-2 justify-center pt-4 border-t border-slate-200 border-dashed mt-auto mb-6">
-                          <Button variant="outline" size="sm" onClick={() => addAnnounceBlock('text')}><AlignLeft className="w-4 h-4 mr-2"/> Teks</Button>
-                          <Button variant="outline" size="sm" onClick={() => addAnnounceBlock('list')}><List className="w-4 h-4 mr-2"/> List</Button>
-                          <Button variant="outline" size="sm" onClick={() => addAnnounceBlock('image')}><ImageIcon className="w-4 h-4 mr-2"/> Gambar</Button>
-                          <Button variant="outline" size="sm" onClick={() => addAnnounceBlock('table')}><Grid3X3 className="w-4 h-4 mr-2"/> Tabel</Button>
-                      </div>
-                  </div>
-              </div>
-              <DialogFooter className="px-6 py-4 border-t bg-white flex-col sm:flex-row gap-2 shrink-0">
-                  <Button variant="outline" onClick={() => setAnnouncementDialogOpen(false)}>Batal</Button>
-                  <Button onClick={handleSaveAnnouncement} disabled={isUploading} className="bg-red-600 hover:bg-red-700 text-white">Simpan Pengumuman</Button>
-              </DialogFooter>
-          </DialogContent>
-      </Dialog>
-      
-      {/* --- DIALOG EDIT FORM (VOCAB/LESSON/DIALOG/EXERCISE) --- */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-[90dvh] w-full sm:max-w-md rounded-2xl border-0 shadow-xl overflow-hidden max-h-[85dvh] flex flex-col p-0 bg-white">
-            <DialogHeader className="px-6 py-4 border-b shrink-0 bg-slate-50/50"><DialogTitle>{editingItem ? "Edit Data" : "Tambah Baru"}</DialogTitle><DialogDescription className="hidden">Form Data</DialogDescription></DialogHeader>
-            <div className="flex-1 overflow-y-auto p-6">
-                <div className="grid gap-4">
-                {formType === "vocab" && (
-                    <>
-                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Kata Jerman</Label><Input value={formData.german} onChange={e => setFormData({...formData, german: e.target.value})} className="font-bold" placeholder="Contoh: der Apfel"/></div>
-                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Arti Indonesia</Label><Input value={formData.indonesian} onChange={e => setFormData({...formData, indonesian: e.target.value})} className="font-bold" placeholder="Contoh: Apel"/></div>
-                        
-                        {/* UPDATE: PILIH KATEGORI */}
-                        <div className="space-y-1">
-                            <Label className="text-xs font-bold text-slate-500">Kategori</Label>
-                            <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val})}>
-                                <SelectTrigger><SelectValue placeholder="Pilih..."/></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="noun">Nomen (Kata Benda)</SelectItem>
-                                    <SelectItem value="verb">Verb (Kata Kerja)</SelectItem>
-                                    <SelectItem value="adjective">Adjektiv (Sifat)</SelectItem>
-                                    <SelectItem value="phrase">Frasa</SelectItem>
-                                    <SelectItem value="adverb">Adverb (Keterangan)</SelectItem>
-                                    <SelectItem value="other">Lainnya</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Contoh Kalimat</Label><Textarea value={formData.example} onChange={e => setFormData({...formData, example: e.target.value})} placeholder="Contoh: Ich esse einen Apfel."/></div>
-                    </>
                 )}
-                {/* ... (BAGIAN LAIN TETAP SAMA) ... */}
+                {formType === "lesson" && (
+                  <div className="space-y-5">
+                      <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Judul Bab</Label><Input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="h-12 font-bold rounded-xl border-transparent bg-[#f8f9fa] focus:border-indigo-200 focus:bg-white" placeholder="Contoh: Dasar Perkenalan"/></div>
+                      <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Slug (ID Unik)</Label><Input value={formData.slug} onChange={e => setFormData({...formData, slug: e.target.value})} className="h-12 font-mono text-sm rounded-xl border-transparent bg-[#f8f9fa] focus:border-indigo-200 focus:bg-white" placeholder="perkenalan-a1"/></div>
+                      <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Urutan</Label><Input type="number" value={formData.order_index} onChange={e => setFormData({...formData, order_index: e.target.value ? parseInt(e.target.value) : 0})} className="h-12 font-bold rounded-xl border-transparent bg-[#f8f9fa] focus:border-indigo-200 focus:bg-white" /></div>
+                  </div>
+                )}
                 {formType === "dialog" && (
-                    <>
-                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Judul Dialog</Label><Input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="font-bold"/></div>
-                        <div className="space-y-1">
-                            <Label className="text-xs font-bold text-slate-500">Isi Dialog (Dinamis)</Label>
-                            {/* DYNAMIC DIALOG LINE EDITOR */}
-                            <div className="border rounded-lg p-2 space-y-2 max-h-[40vh] overflow-y-auto">
+                    <div className="space-y-5">
+                        <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Judul Dialog</Label><Input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="h-12 font-bold rounded-xl border-transparent bg-[#f8f9fa] focus:border-indigo-200 focus:bg-white"/></div>
+                        <div className="space-y-3">
+                            <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Isi Dialog</Label>
+                            <div className="space-y-4">
                                 {formData.dialog_lines.map((line, idx) => (
-                                    <div key={idx} className="flex flex-col gap-1 p-3 border rounded-lg bg-slate-50 shadow-sm relative group">
+                                    <div key={idx} className="flex flex-col gap-3 p-5 border border-slate-100 rounded-[1.5rem] bg-white shadow-[0_2px_10px_rgb(0,0,0,0.02)] relative group">
+                                        <div className="flex gap-3 items-center justify-between">
                                             <div className="flex gap-2 items-center">
-                                                <span className="text-[10px] font-bold text-slate-400 w-6">#{idx+1}</span>
-                                                <Input className="w-24 h-8 text-xs font-bold bg-white" placeholder="Speaker" value={line.speaker} onChange={e => {
-                                                    const newLines = [...formData.dialog_lines];
-                                                    newLines[idx].speaker = e.target.value;
-                                                    setFormData({...formData, dialog_lines: newLines});
-                                                }} />
-                                                <Button size="icon" variant="ghost" className="h-8 w-8 ml-auto text-red-500 hover:bg-red-50" onClick={() => {
-                                                    const newLines = formData.dialog_lines.filter((_, i) => i !== idx);
-                                                    setFormData({...formData, dialog_lines: newLines});
-                                                }}><Trash2 className="w-4 h-4"/></Button>
+                                                <Badge className="bg-[#f8f9fa] text-slate-500 shadow-none border-none font-bold text-xs w-8 h-8 flex justify-center p-0 rounded-lg">#{idx+1}</Badge>
+                                                <Input className="w-24 h-10 text-xs font-bold bg-[#f8f9fa] border-transparent focus:border-indigo-200 focus:bg-white rounded-xl text-center" placeholder="Speaker" value={line.speaker} onChange={e => { const newLines = [...formData.dialog_lines]; newLines[idx].speaker = e.target.value; setFormData({...formData, dialog_lines: newLines}); }} />
                                             </div>
-                                            <Textarea className="text-sm min-h-[50px] bg-white resize-none" placeholder="Teks Jerman..." value={line.german} onChange={e => {
-                                                const newLines = [...formData.dialog_lines];
-                                                newLines[idx].german = e.target.value;
-                                                setFormData({...formData, dialog_lines: newLines});
-                                            }} />
-                                            <Input className="h-8 text-xs bg-white" placeholder="Terjemahan Indonesia (Opsional)" value={line.indonesian || ""} onChange={e => {
-                                                const newLines = [...formData.dialog_lines];
-                                                newLines[idx].indonesian = e.target.value;
-                                                setFormData({...formData, dialog_lines: newLines});
-                                            }} />
+                                            <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg" onClick={() => { const newLines = formData.dialog_lines.filter((_, i) => i !== idx); setFormData({...formData, dialog_lines: newLines}); }}><Trash2 className="w-4 h-4"/></Button>
+                                        </div>
+                                        <Textarea className="text-sm min-h-[60px] bg-[#f8f9fa] border-transparent focus:border-indigo-200 focus:bg-white rounded-xl font-medium p-4" placeholder="Teks Jerman..." value={line.german} onChange={e => { const newLines = [...formData.dialog_lines]; newLines[idx].german = e.target.value; setFormData({...formData, dialog_lines: newLines}); }} />
+                                        <Input className="h-10 text-xs bg-[#f8f9fa] border-transparent focus:border-indigo-200 focus:bg-white rounded-xl px-4" placeholder="Terjemahan Indo (Opsional)" value={line.indonesian || ""} onChange={e => { const newLines = [...formData.dialog_lines]; newLines[idx].indonesian = e.target.value; setFormData({...formData, dialog_lines: newLines}); }} />
                                     </div>
                                 ))}
-                                <Button size="sm" variant="outline" className="w-full text-xs border-dashed border-2 py-4 h-auto" onClick={() => setFormData({...formData, dialog_lines: [...formData.dialog_lines, {speaker: "A", german: "", indonesian: ""}]})}><Plus className="w-4 h-4 mr-2"/> Tambah Baris Dialog</Button>
                             </div>
+                            <Button size="sm" variant="outline" className="w-full h-12 rounded-2xl text-xs font-bold border-dashed border-2 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 mt-2 bg-transparent" onClick={() => setFormData({...formData, dialog_lines: [...formData.dialog_lines, {speaker: "A", german: "", indonesian: ""}]})}><Plus className="w-4 h-4 mr-2"/> Tambah Baris Dialog</Button>
                         </div>
-                    </>
+                    </div>
                 )}
                 {formType === "exercise" && (
-                    <>
-                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Pertanyaan</Label><Input value={formData.question} onChange={e => setFormData({...formData, question: e.target.value})} className="font-bold" placeholder="Soal latihan..."/></div>
-                        
-                        <div className="space-y-2 mt-2">
-                           <Label className="text-xs font-bold text-slate-500">Pilihan Jawaban</Label>
+                    <div className="space-y-8">
+                        <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Pertanyaan</Label><Textarea value={formData.question} onChange={e => setFormData({...formData, question: e.target.value})} className="font-bold min-h-[100px] rounded-xl border-transparent bg-[#f8f9fa] focus:border-indigo-200 focus:bg-white p-5" placeholder="Soal latihan..."/></div>
+                        <div className="space-y-4">
+                           <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Opsi Jawaban</Label>
                            {formData.options.map((opt, i) => (
-                               <div key={i} className="flex items-center gap-2">
-                                   <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-500 shrink-0">{String.fromCharCode(65+i)}</div>
-                                   <Input value={opt} onChange={e => {
-                                       const newOpts = [...formData.options];
-                                       newOpts[i] = e.target.value;
-                                       setFormData({...formData, options: newOpts});
-                                   }} placeholder={`Pilihan ${String.fromCharCode(65+i)}`} />
+                               <div key={i} className="flex items-center gap-3">
+                                   <div className="w-12 h-12 rounded-xl bg-[#f8f9fa] flex items-center justify-center text-sm font-bold text-slate-400 shrink-0">{String.fromCharCode(65+i)}</div>
+                                   <Input value={opt} onChange={e => { const newOpts = [...formData.options]; newOpts[i] = e.target.value; setFormData({...formData, options: newOpts}); }} placeholder={`Opsi ${String.fromCharCode(65+i)}`} className="h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:border-indigo-200 focus:bg-white font-medium" />
                                </div>
                            ))}
                         </div>
-
-                        <div className="space-y-1 mt-2">
-                            <Label className="text-xs font-bold text-slate-500">Jawaban Benar</Label>
+                        <div className="space-y-2 pt-6 mt-6 border-t border-slate-50">
+                            <Label className="text-[11px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-1"><CheckCircle2 size={14}/> Kunci Jawaban</Label>
                             <Select value={String(formData.correct_answer_idx)} onValueChange={(val) => setFormData({...formData, correct_answer_idx: val})}>
-                                <SelectTrigger><SelectValue placeholder="Pilih jawaban benar" /></SelectTrigger>
+                                <SelectTrigger className="h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-emerald-200 font-bold text-emerald-700"><SelectValue placeholder="Pilih yang benar..." /></SelectTrigger>
                                 <SelectContent>
                                     {formData.options.map((opt, i) => (
-                                        <SelectItem key={i} value={String(i)}>
-                                            <span className="font-bold mr-2">{String.fromCharCode(65+i)}:</span> {opt || `(Kosong)`}
+                                        <SelectItem key={i} value={String(i)} className="font-bold">
+                                            <span className="mr-2 text-emerald-600">{String.fromCharCode(65+i)}:</span> {opt || `(Kosong)`}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
-                    </>
+                    </div>
                 )}
-                {formType === "lesson" && (
-                    <>
-                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Judul Bab</Label><Input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="font-bold" placeholder="Contoh: Perkenalan Diri"/></div>
-                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Slug (ID Unik)</Label><Input value={formData.slug} onChange={e => setFormData({...formData, slug: e.target.value})} className="font-mono text-sm" placeholder="a1-perkenalan"/></div>
-                        <div className="space-y-1"><Label className="text-xs font-bold text-slate-500">Urutan (Angka)</Label><Input type="number" value={formData.order_index} onChange={e => setFormData({...formData, order_index: e.target.value ? parseInt(e.target.value) : 0})} placeholder="1"/></div>
-                    </>
-                )}
-                </div>
             </div>
-            <DialogFooter className="px-6 py-4 border-t bg-white flex-col sm:flex-row gap-2 shrink-0"><Button variant="outline" onClick={() => setDialogOpen(false)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleSave} disabled={isUploading} className="w-full sm:w-auto">Simpan</Button></DialogFooter>
+            <DialogFooter className="p-8 border-t border-slate-50 flex-row gap-3 shrink-0">
+                <Button variant="ghost" onClick={() => setDialogOpen(false)} className="flex-1 font-bold h-12 rounded-xl text-slate-400 hover:bg-[#f8f9fa] hover:text-slate-700">Batal</Button>
+                <Button onClick={handleSave} disabled={isUploading} className="flex-1 h-12 bg-slate-900 hover:bg-slate-800 font-bold rounded-xl text-white shadow-sm">{isUploading ? <Loader2 className="w-5 h-5 animate-spin"/> : "Simpan Data"}</Button>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* --- DIALOG MATERI EDITOR (VISUAL BLOCK) --- */}
+      {/* 3. MATERIAL EDITOR DIALOG (VISUAL BLOCK) */}
       <Dialog open={materialDialogOpen} onOpenChange={setMaterialDialogOpen}>
-          <DialogContent className="max-w-[95vw] w-full h-auto max-h-[85dvh] flex flex-col p-0 overflow-hidden rounded-2xl border-0 shadow-2xl bg-white my-4">
-              <DialogHeader className="px-6 py-4 border-b flex flex-row items-center justify-between bg-slate-50/50 shrink-0"><DialogTitle className="flex items-center gap-2"><BookText className="w-5 h-5 text-green-600"/> Materi Editor (Visual)</DialogTitle><DialogDescription className="hidden">Editor visual</DialogDescription></DialogHeader>
+          <DialogContent className="max-w-[95vw] w-full h-auto max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-[2rem] border border-slate-100 shadow-[0_20px_60px_rgb(0,0,0,0.08)] bg-white">
+              <DialogHeader className="px-8 py-6 border-b border-slate-50 flex flex-row items-center justify-between shrink-0">
+                  <DialogTitle className="flex items-center gap-2 font-bold text-xl text-slate-800">Visual Editor</DialogTitle>
+                  <DialogDescription className="hidden">Editor</DialogDescription>
+                  <Button variant="ghost" size="icon" onClick={() => setMaterialDialogOpen(false)} className="rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100"><X size={20}/></Button>
+              </DialogHeader>
+              
               <div className="flex-1 flex flex-col md:flex-row overflow-y-auto">
-                  <div className="w-full md:w-80 bg-white p-6 border-b md:border-b-0 md:border-r space-y-4 shrink-0">
-                      <div className="space-y-1"><Label className="text-xs font-bold">Judul Materi</Label><Input value={materialForm.title} onChange={e => setMaterialForm({...materialForm, title: e.target.value})} className="font-bold" placeholder="Contoh: Pengenalan Alfabet"/></div>
-                      <div className="space-y-1"><Label className="text-xs font-bold">ID Unik (Section ID)</Label><Input value={materialForm.section_id} onChange={e => setMaterialForm({...materialForm, section_id: e.target.value})} className="font-mono text-xs" placeholder="a1_1_intro"/></div>
-                      <div className="grid grid-cols-2 gap-2"><div className="space-y-1"><Label className="text-xs font-bold">Urutan</Label><Input type="number" value={materialForm.order_index} onChange={e => setMaterialForm({...materialForm, order_index: parseInt(e.target.value)})} /></div><div className="space-y-1"><Label className="text-xs font-bold">Level</Label><Select value={materialForm.level_id} onValueChange={(val) => setMaterialForm({...materialForm, level_id: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{levels.map(l => <SelectItem key={l.id} value={l.id}>{l.id}</SelectItem>)}</SelectContent></Select></div></div>
+                  {/* LEFT: Config */}
+                  <div className="w-full md:w-[350px] bg-white p-8 border-b md:border-b-0 md:border-r border-slate-50 space-y-8 shrink-0 overflow-y-auto custom-scrollbar">
+                      <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Judul Materi</Label><Input value={materialForm.title} onChange={e => setMaterialForm({...materialForm, title: e.target.value})} className="font-bold h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200" placeholder="Contoh: Alfabet"/></div>
+                      <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">ID Section (Unik)</Label><Input value={materialForm.section_id} onChange={e => setMaterialForm({...materialForm, section_id: e.target.value})} className="font-mono text-sm h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200" placeholder="a1_1_intro"/></div>
+                        <div className="space-y-2">
+                            <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Status Materi</Label>
+                            <Select value={materialForm.status} onValueChange={(val) => setMaterialForm({...materialForm, status: val})}>
+                                <SelectTrigger className="h-12 rounded-xl font-bold border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="draft" className="font-bold text-slate-500">📄 Draft</SelectItem>
+                                    <SelectItem value="review" className="font-bold text-amber-600">⏳ In Review</SelectItem>
+                                    <SelectItem value="published" className="font-bold text-emerald-600">🌐 Published</SelectItem>
+                                    <SelectItem value="rejected" className="font-bold text-red-600">❌ Rejected</SelectItem>
+                                    <SelectItem value="archived" className="font-bold text-slate-400">🗄️ Archived</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>                      
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Urutan</Label><Input type="number" value={materialForm.order_index} onChange={e => setMaterialForm({...materialForm, order_index: parseInt(e.target.value)})} className="h-12 rounded-xl font-bold border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200" /></div>
+                          <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Level</Label><Select value={materialForm.level_id} onValueChange={(val) => setMaterialForm({...materialForm, level_id: val})}><SelectTrigger className="h-12 rounded-xl font-bold border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200"><SelectValue /></SelectTrigger><SelectContent>{levels.map(l => <SelectItem key={l.id} value={l.id} className="font-bold">{l.id}</SelectItem>)}</SelectContent></Select></div>
+                      </div>
                       
-                      {/* RESOURCE LINK EDITOR - UPDATED WITH TYPE DROPDOWN */}
-                      <div className="border-t pt-4 space-y-2">
-                        <Label className="text-xs font-bold">Referensi / Link Luar</Label>
-                        {materialForm.resources.map((res, idx) => (
-                           <div key={idx} className="flex gap-2 items-start p-2 bg-slate-50 rounded border">
-                             <div className="flex-1 space-y-2">
-                               <div className="flex gap-2">
-                                   <div className="flex-1">
-                                       <Label className="text-[10px] text-slate-400">Judul Link</Label>
-                                       <Input placeholder="Contoh: Video Youtube" className="text-xs h-8" value={res.title} onChange={e => {const r = [...materialForm.resources]; r[idx].title = e.target.value; setMaterialForm({...materialForm, resources: r})}} />
-                                   </div>
-                                   <div className="w-1/3">
-                                       <Label className="text-[10px] text-slate-400">Tipe</Label>
-                                       <Select value={res.type} onValueChange={(val) => {const r = [...materialForm.resources]; r[idx].type = val; setMaterialForm({...materialForm, resources: r})}}>
-                                            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="web">🌐 Web</SelectItem>
-                                                <SelectItem value="pdf">📄 PDF</SelectItem>
-                                                <SelectItem value="video">🎥 Video</SelectItem>
-                                                <SelectItem value="audio">🎧 Audio</SelectItem>
-                                            </SelectContent>
-                                       </Select>
-                                   </div>
-                               </div>
-                               <div>
-                                   <Label className="text-[10px] text-slate-400">URL</Label>
-                                   <Input placeholder="https://..." className="text-xs h-8" value={res.url} onChange={e => {const r = [...materialForm.resources]; r[idx].url = e.target.value; setMaterialForm({...materialForm, resources: r})}} />
-                               </div>
-                             </div>
-                             <Button variant="ghost" size="icon" className="h-8 w-8 mt-6 text-slate-400 hover:text-red-500" onClick={() => {const r = materialForm.resources.filter((_, i) => i !== idx); setMaterialForm({...materialForm, resources: r})}}><Trash2 className="w-4 h-4"/></Button>
-                           </div>
-                        ))}
-                        <Button variant="outline" size="sm" className="w-full text-xs mt-2" onClick={() => setMaterialForm({...materialForm, resources: [...materialForm.resources, {title: "", url: "", type: "web"}]})}><Plus className="w-3 h-3 mr-1"/> Tambah Link</Button>
+                      {/* TIPS EDITOR */}
+                      <div className="border-t border-slate-50 pt-8 space-y-3">
+                           <Label className="text-[11px] font-bold text-amber-600 uppercase tracking-widest flex items-center gap-1.5"><Lightbulb className="w-3.5 h-3.5"/> Tips (Baris baru = Poin baru)</Label>
+                           <Textarea value={materialForm.tips} onChange={(e) => setMaterialForm({...materialForm, tips: e.target.value})} placeholder="Tip 1...&#10;Tip 2..." className="bg-amber-50/50 border-transparent focus:border-amber-200 focus:bg-white text-sm font-medium min-h-[120px] rounded-xl p-5" />
                       </div>
 
-                      {/* UPDATE: INPUT TIPS DI MATERI EDITOR */}
-                      <div className="border-t pt-4 space-y-2">
-                           <Label className="text-xs font-bold text-yellow-600 flex items-center gap-1"><Lightbulb className="w-3 h-3"/> Tips Penting (Baris baru = Poin baru)</Label>
-                           <Textarea value={materialForm.tips} onChange={(e) => setMaterialForm({...materialForm, tips: e.target.value})} placeholder="Tips 1...&#10;Tips 2..." className="bg-yellow-50 border-yellow-200 text-xs min-h-[80px]" />
+                      {/* RESOURCES EDITOR */}
+                      <div className="border-t border-slate-50 pt-8 space-y-4">
+                        <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><LinkIcon size={14}/> Referensi (Link)</Label>
+                        <div className="space-y-4">
+                            {materialForm.resources.map((res, idx) => (
+                               <div key={idx} className="p-5 bg-[#f8f9fa] rounded-[1.5rem] border border-transparent hover:border-slate-200 transition-colors space-y-4 relative group">
+                                 <Button variant="ghost" size="icon" className="absolute top-3 right-3 h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-white rounded-xl" onClick={() => {const r = materialForm.resources.filter((_, i) => i !== idx); setMaterialForm({...materialForm, resources: r})}}><Trash2 className="w-4 h-4"/></Button>
+                                 <div className="flex gap-3 pr-8">
+                                     <div className="flex-1 space-y-1.5">
+                                         <Label className="text-[9px] text-slate-400 font-bold uppercase">Judul</Label>
+                                         <Input placeholder="Contoh: Video" className="text-xs h-10 rounded-xl border-slate-100 font-bold bg-white" value={res.title} onChange={e => {const r = [...materialForm.resources]; r[idx].title = e.target.value; setMaterialForm({...materialForm, resources: r})}} />
+                                     </div>
+                                     <div className="w-[45%] space-y-1.5">
+                                         <Label className="text-[9px] text-slate-400 font-bold uppercase">Tipe</Label>
+                                         <Select value={res.type} onValueChange={(val) => {const r = [...materialForm.resources]; r[idx].type = val; setMaterialForm({...materialForm, resources: r})}}>
+                                              <SelectTrigger className="h-10 text-xs font-bold rounded-xl border-slate-100 bg-white"><SelectValue /></SelectTrigger>
+                                              <SelectContent>
+                                                  <SelectItem value="web">🌐 Web</SelectItem>
+                                                  <SelectItem value="pdf">📄 PDF</SelectItem>
+                                                  <SelectItem value="video">🎥 Video</SelectItem>
+                                                  <SelectItem value="audio">🎧 Audio</SelectItem>
+                                              </SelectContent>
+                                         </Select>
+                                     </div>
+                                 </div>
+                                 <div className="space-y-1.5">
+                                     <Label className="text-[9px] text-slate-400 font-bold uppercase">URL Destination</Label>
+                                     <Input placeholder="https://..." className="text-xs h-10 rounded-xl border-slate-100 bg-white" value={res.url} onChange={e => {const r = [...materialForm.resources]; r[idx].url = e.target.value; setMaterialForm({...materialForm, resources: r})}} />
+                                 </div>
+                               </div>
+                            ))}
+                        </div>
+                        <Button variant="outline" className="w-full h-12 text-xs font-bold border-dashed border-2 rounded-xl text-slate-400 hover:border-indigo-200 hover:text-indigo-600 bg-transparent" onClick={() => setMaterialForm({...materialForm, resources: [...materialForm.resources, {title: "", url: "", type: "web"}]})}><Plus className="w-4 h-4 mr-2"/> Tambah Link Referensi</Button>
                       </div>
-
                   </div>
                   
-                  <div className="flex-1 bg-slate-50 p-4 md:p-6 flex flex-col gap-4">
-                      {materialForm.content.length === 0 && <div className="text-center text-slate-400 py-10 font-medium border-2 border-dashed rounded-xl flex flex-col items-center justify-center h-40"><p>Belum ada konten.</p><p className="text-xs mt-1">Klik tombol di bawah untuk menambah isi materi.</p></div>}
+                  {/* RIGHT: Canvas */}
+                  <div className="flex-1 bg-[#f8f9fa] p-8 md:p-12 flex flex-col gap-6 overflow-y-auto custom-scrollbar relative">
+                      {materialForm.content.length === 0 && (
+                          <div className="text-center text-slate-400 font-medium border-2 border-dashed border-slate-200 rounded-[2rem] flex flex-col items-center justify-center h-[300px] mt-10">
+                              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-5 shadow-sm"><LayoutDashboard className="w-8 h-8 text-slate-300"/></div>
+                              <p className="text-slate-700 font-bold text-lg">Canvas Kosong</p>
+                              <p className="text-sm mt-1">Gunakan toolbar di bawah untuk menambah teks, list, atau gambar.</p>
+                          </div>
+                      )}
+                      
                       {materialForm.content.map((block, idx) => (
-                          <div key={idx} className="bg-white border rounded-xl p-4 shadow-sm relative group animate-in slide-in-from-bottom-2 duration-300">
-                              <div className="flex justify-between items-center mb-2">
-                                  <span className="text-[10px] uppercase font-bold bg-slate-100 px-2 py-1 rounded text-slate-500 select-none cursor-default">
-                                      {block.type === 'text' ? 'Paragraf' : block.type === 'list' ? 'Daftar Poin' : block.type === 'image' ? 'Gambar' : 'Tabel'}
-                                  </span>
-                                  <div className="flex items-center gap-1">
-                                      <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-blue-600 hover:bg-blue-50" onClick={() => handleMoveContentBlock(idx, 'up')} disabled={idx === 0}><ArrowUp className="w-4 h-4"/></Button>
-                                      <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-blue-600 hover:bg-blue-50" onClick={() => handleMoveContentBlock(idx, 'down')} disabled={idx === materialForm.content.length - 1}><ArrowDown className="w-4 h-4"/></Button>
-                                      <div className="w-px h-4 bg-slate-200 mx-1"></div>
-                                      <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500 hover:bg-red-50" onClick={() => removeContentBlock(idx)}><Trash2 className="w-4 h-4"/></Button>
+                          <div key={idx} className="bg-white border border-slate-100 rounded-[2rem] p-8 shadow-[0_2px_10px_rgb(0,0,0,0.02)] relative group animate-in slide-in-from-bottom-4 duration-500">
+                              <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-50">
+                                  <Badge className="bg-[#f8f9fa] text-slate-500 shadow-none border-none uppercase tracking-widest text-[9px] font-bold px-3 py-1.5 rounded-lg">
+                                      {block.type === 'text' ? 'Paragraf Teks' : block.type === 'list' ? 'Daftar Poin' : block.type === 'image' ? 'Gambar/Media' : 'Tabel Data'}
+                                  </Badge>
+                                  <div className="flex items-center gap-1 bg-[#f8f9fa] p-1 rounded-xl">
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white" onClick={() => handleMoveContentBlock(idx, 'up')} disabled={idx === 0}><ArrowUp className="w-4 h-4"/></Button>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white" onClick={() => handleMoveContentBlock(idx, 'down')} disabled={idx === materialForm.content.length - 1}><ArrowDown className="w-4 h-4"/></Button>
+                                      <div className="w-px h-5 bg-slate-200 mx-1"></div>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-white" onClick={() => removeContentBlock(idx)}><Trash2 className="w-4 h-4"/></Button>
                                   </div>
                               </div>
                               
-                              {block.type === 'text' && (<><Label className="text-[10px] text-slate-400 mb-1 block">Isi Paragraf</Label><Textarea value={block.content} onChange={(e) => updateContentBlock(idx, "content", e.target.value)} placeholder="Tulis paragraf materi di sini..." className="min-h-[100px] border-slate-200 focus-visible:ring-1 text-base leading-relaxed" /></>)}
-                              {block.type === 'list' && (<div className="space-y-1"><Label className="text-[10px] text-slate-400 mb-1 block">List Item (Pisahkan dengan Enter)</Label><Textarea value={block.items?.join("\n")} onChange={(e) => updateContentBlock(idx, "items_raw", e.target.value)} placeholder="• Poin Pertama&#10;• Poin Kedua" className="min-h-[100px] bg-slate-50 font-medium" /></div>)}
-                              {block.type === 'image' && (<div className="space-y-3"><div className="flex flex-col sm:flex-row gap-4"><div className="flex-1 space-y-2"><Label className="text-[10px] text-slate-400 block">Link Gambar (URL)</Label><Input value={block.src} onChange={(e) => updateContentBlock(idx, "src", e.target.value)} placeholder="https://..." className="text-sm" /><Label className="text-[10px] text-slate-400 block">Deskripsi (Alt Text)</Label><Input value={block.alt} onChange={(e) => updateContentBlock(idx, "alt", e.target.value)} placeholder="Keterangan gambar" className="text-xs" /></div>{block.src && (<div className="w-full sm:w-24 h-24 bg-slate-100 rounded border flex items-center justify-center overflow-hidden shrink-0"><img src={block.src} alt="Preview" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} /></div>)}</div></div>)}
-                              {block.type === 'table' && (<div className="space-y-2"><Label className="text-[10px] text-slate-400 block">Format CSV (Pisahkan koma)</Label><Textarea defaultValue={getTableAsCSV(block)} onBlur={(e) => updateContentBlock(idx, "csv_raw", e.target.value)} placeholder="Kolom A, Kolom B&#10;Data 1, Data 2" className="min-h-[100px] font-mono text-xs bg-slate-50" /></div>)}
+                              {block.type === 'text' && (
+                                  <div className="space-y-3">
+                                      <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Isi Paragraf</Label>
+                                      <Textarea value={block.content} onChange={(e) => updateContentBlock(idx, "content", e.target.value)} placeholder="Tulis paragraf di sini..." className="min-h-[150px] border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200 rounded-2xl text-base leading-relaxed p-6" />
+                                  </div>
+                              )}
+                              {block.type === 'list' && (
+                                  <div className="space-y-3">
+                                      <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Daftar Poin (1 baris = 1 poin)</Label>
+                                      <Textarea value={block.items?.join("\n")} onChange={(e) => updateContentBlock(idx, "items_raw", e.target.value)} placeholder="Poin pertama&#10;Poin kedua" className="min-h-[150px] border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200 rounded-2xl font-medium p-6" />
+                                  </div>
+                              )}
+                              {block.type === 'image' && (
+                                  <div className="flex flex-col sm:flex-row gap-8">
+                                      <div className="flex-1 space-y-5">
+                                          <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">URL Gambar</Label><Input value={block.src} onChange={(e) => updateContentBlock(idx, "src", e.target.value)} placeholder="https://..." className="h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200" /></div>
+                                          <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Deskripsi (Alt Text)</Label><Input value={block.alt} onChange={(e) => updateContentBlock(idx, "alt", e.target.value)} placeholder="Keterangan..." className="h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200" /></div>
+                                      </div>
+                                      {block.src && (
+                                          <div className="w-full sm:w-48 h-48 bg-[#f8f9fa] rounded-3xl border border-slate-100 flex items-center justify-center overflow-hidden shrink-0">
+                                              <img src={block.src} alt="Preview" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                                          </div>
+                                      )}
+                                  </div>
+                              )}
+                              {block.type === 'table' && (
+                                  <div className="space-y-3">
+                                      <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Format CSV (Pemisah koma)</Label>
+                                      <Textarea defaultValue={getTableAsCSV(block)} onBlur={(e) => updateContentBlock(idx, "csv_raw", e.target.value)} placeholder="Header 1, Header 2&#10;Data A, Data B" className="min-h-[150px] font-mono text-sm bg-slate-900 text-emerald-400 rounded-2xl p-6 border-none" />
+                                  </div>
+                              )}
                           </div>
                       ))}
-                      <div className="grid grid-cols-2 sm:flex gap-2 justify-center pt-4 border-t border-slate-200 border-dashed mt-4 mb-10">
-                          <Button variant="outline" size="sm" onClick={() => addContentBlock('text')} className="hover:bg-blue-50 hover:text-blue-600 border-slate-300"><AlignLeft className="w-4 h-4 mr-2"/> Teks</Button>
-                          <Button variant="outline" size="sm" onClick={() => addContentBlock('list')} className="hover:bg-green-50 hover:text-green-600 border-slate-300"><List className="w-4 h-4 mr-2"/> List</Button>
-                          <Button variant="outline" size="sm" onClick={() => addContentBlock('image')} className="hover:bg-pink-50 hover:text-pink-600 border-slate-300"><ImageIcon className="w-4 h-4 mr-2"/> Gambar</Button>
-                          <Button variant="outline" size="sm" onClick={() => addContentBlock('table')} className="hover:bg-purple-50 hover:text-purple-600 border-slate-300"><Grid3X3 className="w-4 h-4 mr-2"/> Tabel</Button>
+
+                      {/* FLOATING TOOLBAR */}
+                      <div className="sticky bottom-0 mt-10 w-full flex justify-center pb-8 pt-4 pointer-events-none z-20">
+                          <div className="bg-white/90 backdrop-blur-xl p-2.5 rounded-[1.5rem] shadow-[0_20px_40px_rgb(0,0,0,0.08)] border border-slate-100 flex gap-2 pointer-events-auto">
+                              <Button variant="ghost" onClick={() => addContentBlock('text')} className="h-12 px-5 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 font-bold text-slate-500"><AlignLeft className="w-4 h-4 sm:mr-2"/><span className="hidden sm:inline">Teks</span></Button>
+                              <div className="w-px bg-slate-100 my-2"></div>
+                              <Button variant="ghost" onClick={() => addContentBlock('list')} className="h-12 px-5 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 font-bold text-slate-500"><List className="w-4 h-4 sm:mr-2"/><span className="hidden sm:inline">List</span></Button>
+                              <div className="w-px bg-slate-100 my-2"></div>
+                              <Button variant="ghost" onClick={() => addContentBlock('image')} className="h-12 px-5 rounded-xl hover:bg-rose-50 hover:text-rose-600 font-bold text-slate-500"><ImageIcon className="w-4 h-4 sm:mr-2"/><span className="hidden sm:inline">Gambar</span></Button>
+                              <div className="w-px bg-slate-100 my-2"></div>
+                              <Button variant="ghost" onClick={() => addContentBlock('table')} className="h-12 px-5 rounded-xl hover:bg-amber-50 hover:text-amber-600 font-bold text-slate-500"><Grid3X3 className="w-4 h-4 sm:mr-2"/><span className="hidden sm:inline">Tabel</span></Button>
+                          </div>
                       </div>
                   </div>
               </div>
-              <DialogFooter className="px-6 py-4 border-t bg-white flex-col sm:flex-row gap-2 shrink-0"><Button variant="outline" onClick={() => setMaterialDialogOpen(false)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleSaveMaterial} disabled={isUploading} className="bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto">Simpan Materi</Button></DialogFooter>
+              <DialogFooter className="p-8 border-t border-slate-50 flex flex-row items-center justify-end gap-3 shrink-0">
+                  <Button variant="ghost" onClick={() => setMaterialDialogOpen(false)} className="font-bold h-12 rounded-xl px-8 text-slate-400 hover:text-slate-700 hover:bg-[#f8f9fa]">Batal</Button>
+                  <Button onClick={handleSaveMaterial} disabled={isUploading} className="bg-slate-900 hover:bg-slate-800 font-bold h-12 rounded-xl px-8 text-white shadow-sm">{isUploading ? <Loader2 className="w-5 h-5 animate-spin"/> : "Simpan Materi"}</Button>
+              </DialogFooter>
           </DialogContent>
       </Dialog>
 
-      {/* --- DIALOG PROGRAM EDITOR (MANUAL) --- */}
+      {/* 4. PROGRAM EDITOR DIALOG */}
       <Dialog open={programDialogOpen} onOpenChange={setProgramDialogOpen}>
-          <DialogContent className="max-w-[95vw] w-full h-auto max-h-[85dvh] flex flex-col p-0 overflow-hidden rounded-2xl border-0 shadow-2xl bg-white my-4">
-              <DialogHeader className="px-6 py-4 border-b bg-slate-50/50 shrink-0"><DialogTitle className="flex items-center gap-2"><GraduationCap className="w-5 h-5 text-orange-600"/> Program Editor</DialogTitle><DialogDescription className="hidden">Editor Program</DialogDescription></DialogHeader>
-              <div className="flex-1 p-6 overflow-y-auto space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="space-y-1"><Label>ID Program (Unik)</Label><Input value={programForm.id} onChange={e => setProgramForm({...programForm, id: e.target.value})} placeholder="aupair, aus_it, dll" className="font-mono text-xs"/></div>
-                   <div className="space-y-1">
-                      <Label>Kategori</Label>
-                      {isCustomCategory ? (
-                        <div className="flex gap-2">
-                           <Input placeholder="Nama Kategori Baru" value={programForm.category} onChange={e => setProgramForm({...programForm, category: e.target.value})} className="font-bold text-orange-600" />
-                           <Button variant="ghost" size="icon" onClick={() => setIsCustomCategory(false)}><RotateCcw className="w-4 h-4 text-slate-400"/></Button>
+          <DialogContent className="max-w-[95vw] w-full h-auto max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-[2rem] border border-slate-100 shadow-[0_20px_60px_rgb(0,0,0,0.08)] bg-white">
+              <DialogHeader className="px-8 py-6 border-b border-slate-50 shrink-0 flex flex-row items-center justify-between">
+                  <DialogTitle className="flex items-center gap-2 font-bold text-xl text-slate-800">Editor Program Studi</DialogTitle>
+                  <Button variant="ghost" size="icon" onClick={() => setProgramDialogOpen(false)} className="rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100"><X size={20}/></Button>
+              </DialogHeader>
+              
+              <div className="flex-1 p-8 overflow-y-auto custom-scrollbar space-y-12">
+                {/* SECTION 1: Basic Info */}
+                <div className="space-y-6">
+                    <h3 className="font-bold text-lg text-slate-800 border-b border-slate-50 pb-3">1. Info Dasar</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">ID Program (Unik)</Label><Input value={programForm.id} onChange={e => setProgramForm({...programForm, id: e.target.value})} placeholder="Misal: aupair_de" className="font-mono text-sm h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200"/></div>
+                        <div className="space-y-2">
+                            <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Kategori</Label>
+                            {isCustomCategory ? (
+                                <div className="flex gap-2">
+                                    <Input placeholder="Nama kategori baru..." value={programForm.category} onChange={e => setProgramForm({...programForm, category: e.target.value})} className="font-bold text-indigo-600 h-12 rounded-xl bg-white border-indigo-200" />
+                                    <Button variant="outline" size="icon" onClick={() => setIsCustomCategory(false)} className="h-12 w-12 rounded-xl border-slate-200"><RotateCcw className="w-4 h-4 text-slate-400"/></Button>
+                                </div>
+                            ) : (
+                                <Select value={categoryList.includes(programForm.category) ? programForm.category : "custom"} onValueChange={(val) => { if(val === "custom") { setIsCustomCategory(true); setProgramForm({...programForm, category: ""}); } else { setProgramForm({...programForm, category: val}); } }}>
+                                    <SelectTrigger className="h-12 font-bold rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200"><SelectValue placeholder="Pilih Kategori..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {categoryList.map(cat => <SelectItem key={cat} value={cat} className="font-bold">{defaultCategoryLabels[cat] || cat}</SelectItem>)}
+                                        <SelectItem value="custom" className="text-indigo-600 font-bold border-t border-slate-50 mt-1 pt-2">+ Buat Kategori Baru</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            )}
                         </div>
-                      ) : (
-                        <Select value={categoryList.includes(programForm.category) ? programForm.category : "custom"} onValueChange={(val) => {
-                          if(val === "custom") { setIsCustomCategory(true); setProgramForm({...programForm, category: ""}); }
-                          else { setProgramForm({...programForm, category: val}); }
-                        }}>
-                          <SelectTrigger><SelectValue placeholder="Pilih Kategori..." /></SelectTrigger>
-                          <SelectContent>
-                             {categoryList.map(cat => <SelectItem key={cat} value={cat}>{defaultCategoryLabels[cat] || cat}</SelectItem>)}
-                             <SelectItem value="custom" className="text-orange-600 font-bold border-t mt-1 pt-1">+ Tambah Kategori Baru</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                   </div>
-                   <div className="space-y-1 md:col-span-2"><Label>Judul Program</Label><Input value={programForm.title} onChange={e => setProgramForm({...programForm, title: e.target.value})} className="font-bold text-lg" placeholder="Nama Program"/></div>
-                   <div className="space-y-1 md:col-span-2"><Label>Deskripsi</Label><Textarea value={programForm.description} onChange={e => setProgramForm({...programForm, description: e.target.value})} className="h-20" placeholder="Jelaskan detail program..."/></div>
-                   <div className="space-y-1"><Label>Gaji</Label><Input value={programForm.salary} onChange={e => setProgramForm({...programForm, salary: e.target.value})} placeholder="€1000/bulan"/></div>
-                   <div className="space-y-1"><Label>Durasi</Label><Input value={programForm.duration} onChange={e => setProgramForm({...programForm, duration: e.target.value})} placeholder="3 Tahun"/></div>
-                   <div className="space-y-1 md:col-span-2"><Label>Sumber Info</Label><Input value={programForm.source} onChange={e => setProgramForm({...programForm, source: e.target.value})} placeholder="Contoh: ausbildung.de"/></div>
-                </div>
-
-                <div className="space-y-2 border-t pt-4">
-                    <Label className="text-orange-600 font-bold uppercase text-xs">Apa yang dipelajari?</Label>
-                    {programForm.what_you_learn.map((item, idx) => (
-                        <div key={idx} className="flex gap-2"><Input value={item} onChange={e => {const arr = [...programForm.what_you_learn]; arr[idx] = e.target.value; setProgramForm({...programForm, what_you_learn: arr})}} placeholder="Poin pembelajaran" /><Button variant="ghost" size="icon" onClick={() => {const arr = [...programForm.what_you_learn]; arr.splice(idx, 1); setProgramForm({...programForm, what_you_learn: arr})}}><Trash2 className="w-4 h-4 text-red-400"/></Button></div>
-                    ))}
-                    <Button variant="outline" size="sm" onClick={() => setProgramForm({...programForm, what_you_learn: [...programForm.what_you_learn, ""]})}><Plus className="w-3 h-3 mr-2"/> Tambah Poin</Button>
-                </div>
-
-                <div className="space-y-2 border-t pt-4">
-                    <div className="flex items-center gap-2 mb-2"><Label className="text-orange-600 font-bold uppercase text-xs">Persyaratan (Checklist)</Label></div>
-                    
-                    {/* Header Columns for Clarity - Hidden on Mobile */}
-                    <div className="hidden md:grid grid-cols-12 gap-2 px-2 mb-1">
-                        <span className="col-span-3 text-[10px] text-slate-400 font-bold">ID Unik (Kecil)</span>
-                        <span className="col-span-4 text-[10px] text-slate-400 font-bold">Nama Syarat</span>
-                        <span className="col-span-4 text-[10px] text-slate-400 font-bold">Keterangan</span>
+                        <div className="space-y-2 md:col-span-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Judul Program</Label><Input value={programForm.title} onChange={e => setProgramForm({...programForm, title: e.target.value})} className="font-bold text-xl h-14 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200" placeholder="Contoh: Ausbildung Pflegefachkraft"/></div>
+                        <div className="space-y-2 md:col-span-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Deskripsi Detail</Label><Textarea value={programForm.description} onChange={e => setProgramForm({...programForm, description: e.target.value})} className="min-h-[120px] rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200 p-5 font-medium" placeholder="Jelaskan detail program..."/></div>
+                        <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Gaji / Stipend</Label><Input value={programForm.salary} onChange={e => setProgramForm({...programForm, salary: e.target.value})} placeholder="Contoh: €1000/bulan" className="h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200 font-bold text-slate-700"/></div>
+                        <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Durasi</Label><Input value={programForm.duration} onChange={e => setProgramForm({...programForm, duration: e.target.value})} placeholder="Contoh: 3 Tahun" className="h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200 font-bold text-slate-700"/></div>
                     </div>
-
-                    {programForm.requirements.map((req, idx) => (
-                        <div key={idx} className="flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-2 p-4 md:p-2 border rounded-lg bg-slate-50 relative group">
-                             <div className="md:col-span-3">
-                                <Label className="md:hidden text-xs text-slate-400">ID Unik</Label>
-                                <Input className="font-mono text-xs h-8" placeholder="req_id" value={req.req_id} onChange={e => {const arr = [...programForm.requirements]; arr[idx].req_id = e.target.value; setProgramForm({...programForm, requirements: arr})}} />
-                             </div>
-                             <div className="md:col-span-4">
-                                <Label className="md:hidden text-xs text-slate-400">Label Syarat</Label>
-                                <Input className="h-8 text-xs" placeholder="Label" value={req.label} onChange={e => {const arr = [...programForm.requirements]; arr[idx].label = e.target.value; setProgramForm({...programForm, requirements: arr})}} />
-                             </div>
-                             <div className="md:col-span-4">
-                                <Label className="md:hidden text-xs text-slate-400">Catatan</Label>
-                                <Input className="h-8 text-xs" placeholder="Note" value={req.note} onChange={e => {const arr = [...programForm.requirements]; arr[idx].note = e.target.value; setProgramForm({...programForm, requirements: arr})}} />
-                             </div>
-                             <div className="md:col-span-1 flex justify-end md:justify-center">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => {const arr = [...programForm.requirements]; arr.splice(idx, 1); setProgramForm({...programForm, requirements: arr})}}><Trash2 className="w-4 h-4"/></Button>
-                             </div>
-                        </div>
-                    ))}
-                    <Button variant="outline" size="sm" onClick={() => setProgramForm({...programForm, requirements: [...programForm.requirements, { req_id: "", label: "", note: "" }]})}><Plus className="w-3 h-3 mr-2"/> Tambah Syarat</Button>
                 </div>
 
-                <div className="space-y-2 border-t pt-4 mb-10">
-                    <Label className="text-orange-600 font-bold uppercase text-xs">Website Terkait</Label>
-                    
-                     {/* Header Columns - Hidden on Mobile */}
-                     <div className="hidden md:grid grid-cols-12 gap-2 px-2 mb-1">
-                        <span className="col-span-3 text-[10px] text-slate-400 font-bold">Nama Web</span>
-                        <span className="col-span-4 text-[10px] text-slate-400 font-bold">URL Link</span>
-                        <span className="col-span-4 text-[10px] text-slate-400 font-bold">Deskripsi</span>
+                {/* SECTION 2: What You Learn */}
+                <div className="space-y-6">
+                    <h3 className="font-bold text-lg text-slate-800 border-b border-slate-50 pb-3 flex items-center gap-2"><BookOpen className="w-5 h-5 text-indigo-500"/> Apa yang dipelajari?</h3>
+                    <div className="grid gap-3">
+                        {programForm.what_you_learn.map((item, idx) => (
+                            <div key={idx} className="flex gap-3 group">
+                                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">{idx+1}</div>
+                                <Input value={item} onChange={e => {const arr = [...programForm.what_you_learn]; arr[idx] = e.target.value; setProgramForm({...programForm, what_you_learn: arr})}} placeholder="Poin pembelajaran..." className="h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200 font-medium" />
+                                <Button variant="ghost" size="icon" onClick={() => {const arr = [...programForm.what_you_learn]; arr.splice(idx, 1); setProgramForm({...programForm, what_you_learn: arr})}} className="h-12 w-12 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 shrink-0"><Trash2 className="w-5 h-5"/></Button>
+                            </div>
+                        ))}
                     </div>
-
-                    {programForm.links.map((link, idx) => (
-                        <div key={idx} className="flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-2 p-4 md:p-2 border rounded-lg bg-slate-50 relative group">
-                             <div className="md:col-span-3">
-                                <Label className="md:hidden text-xs text-slate-400">Nama Web</Label>
-                                <Input className="h-8 text-xs" placeholder="Label" value={link.label} onChange={e => {const arr = [...programForm.links]; arr[idx].label = e.target.value; setProgramForm({...programForm, links: arr})}} />
-                             </div>
-                             <div className="md:col-span-4">
-                                <Label className="md:hidden text-xs text-slate-400">URL Link</Label>
-                                <Input className="h-8 text-xs" placeholder="https://..." value={link.url} onChange={e => {const arr = [...programForm.links]; arr[idx].url = e.target.value; setProgramForm({...programForm, links: arr})}} />
-                             </div>
-                             <div className="md:col-span-4">
-                                <Label className="md:hidden text-xs text-slate-400">Deskripsi</Label>
-                                <Input className="h-8 text-xs" placeholder="Deskripsi" value={link.description} onChange={e => {const arr = [...programForm.links]; arr[idx].description = e.target.value; setProgramForm({...programForm, links: arr})}} />
-                             </div>
-                             <div className="md:col-span-1 flex justify-end md:justify-center">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => {const arr = [...programForm.links]; arr.splice(idx, 1); setProgramForm({...programForm, links: arr})}}><Trash2 className="w-4 h-4"/></Button>
-                             </div>
-                        </div>
-                    ))}
-                    <Button variant="outline" size="sm" onClick={() => setProgramForm({...programForm, links: [...programForm.links, { label: "", url: "", description: "" }]})}><Plus className="w-3 h-3 mr-2"/> Tambah Link</Button>
+                    <Button variant="outline" className="h-12 rounded-xl border-dashed border-2 text-slate-400 font-bold hover:text-indigo-600 hover:border-indigo-300 w-full sm:w-auto px-8 bg-transparent" onClick={() => setProgramForm({...programForm, what_you_learn: [...programForm.what_you_learn, ""]})}><Plus className="w-4 h-4 mr-2"/> Tambah Poin Pembelajaran</Button>
                 </div>
 
+                {/* SECTION 3: Requirements */}
+                <div className="space-y-6">
+                    <h3 className="font-bold text-lg text-slate-800 border-b border-slate-50 pb-3 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500"/> Persyaratan</h3>
+                    <div className="space-y-4">
+                        {programForm.requirements.map((req, idx) => (
+                            <div key={idx} className="flex flex-col md:flex-row gap-4 p-6 border border-slate-100 rounded-2xl bg-[#f8f9fa] relative group">
+                                <Button variant="ghost" size="icon" className="absolute top-4 right-4 h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg" onClick={() => {const arr = [...programForm.requirements]; arr.splice(idx, 1); setProgramForm({...programForm, requirements: arr})}}><Trash2 className="w-4 h-4"/></Button>
+                                <div className="md:w-1/4 space-y-2">
+                                    <Label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">ID Syarat</Label>
+                                    <Input className="font-mono text-xs h-11 rounded-xl border-slate-200 bg-white" placeholder="req_usia" value={req.req_id} onChange={e => {const arr = [...programForm.requirements]; arr[idx].req_id = e.target.value; setProgramForm({...programForm, requirements: arr})}} />
+                                </div>
+                                <div className="md:w-1/3 space-y-2">
+                                    <Label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Label</Label>
+                                    <Input className="h-11 rounded-xl border-slate-200 bg-white font-bold" placeholder="Batas Usia" value={req.label} onChange={e => {const arr = [...programForm.requirements]; arr[idx].label = e.target.value; setProgramForm({...programForm, requirements: arr})}} />
+                                </div>
+                                <div className="flex-1 space-y-2 mr-10">
+                                    <Label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Catatan / Nilai</Label>
+                                    <Input className="h-11 rounded-xl border-slate-200 bg-white" placeholder="18 - 26 Tahun" value={req.note} onChange={e => {const arr = [...programForm.requirements]; arr[idx].note = e.target.value; setProgramForm({...programForm, requirements: arr})}} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <Button variant="outline" className="h-12 rounded-xl border-dashed border-2 text-slate-400 font-bold hover:text-emerald-600 hover:border-emerald-300 w-full sm:w-auto px-8 bg-transparent" onClick={() => setProgramForm({...programForm, requirements: [...programForm.requirements, { req_id: "", label: "", note: "" }]})}><Plus className="w-4 h-4 mr-2"/> Tambah Syarat</Button>
+                </div>
+
+                {/* SECTION 4: External Links */}
+                <div className="space-y-6">
+                    <h3 className="font-bold text-lg text-slate-800 border-b border-slate-50 pb-3 flex items-center gap-2"><LinkIcon className="w-5 h-5 text-sky-500"/> Link Terkait</h3>
+                    <div className="space-y-4">
+                        {programForm.links.map((link, idx) => (
+                            <div key={idx} className="flex flex-col md:flex-row gap-4 p-6 border border-slate-100 rounded-2xl bg-[#f8f9fa] relative group">
+                                <Button variant="ghost" size="icon" className="absolute top-4 right-4 h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg" onClick={() => {const arr = [...programForm.links]; arr.splice(idx, 1); setProgramForm({...programForm, links: arr})}}><Trash2 className="w-4 h-4"/></Button>
+                                <div className="md:w-1/4 space-y-2">
+                                    <Label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Nama Link</Label>
+                                    <Input className="h-11 rounded-xl border-slate-200 bg-white font-bold" placeholder="Website Resmi" value={link.label} onChange={e => {const arr = [...programForm.links]; arr[idx].label = e.target.value; setProgramForm({...programForm, links: arr})}} />
+                                </div>
+                                <div className="md:w-1/3 space-y-2">
+                                    <Label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">URL Tujuan</Label>
+                                    <Input className="h-11 rounded-xl border-slate-200 bg-white text-xs font-mono" placeholder="https://..." value={link.url} onChange={e => {const arr = [...programForm.links]; arr[idx].url = e.target.value; setProgramForm({...programForm, links: arr})}} />
+                                </div>
+                                <div className="flex-1 space-y-2 mr-10">
+                                    <Label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Deskripsi (Opsional)</Label>
+                                    <Input className="h-11 rounded-xl border-slate-200 bg-white" placeholder="Info lengkap di sini" value={link.description} onChange={e => {const arr = [...programForm.links]; arr[idx].description = e.target.value; setProgramForm({...programForm, links: arr})}} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <Button variant="outline" className="h-12 rounded-xl border-dashed border-2 text-slate-400 font-bold hover:text-sky-600 hover:border-sky-300 w-full sm:w-auto px-8 bg-transparent" onClick={() => setProgramForm({...programForm, links: [...programForm.links, { label: "", url: "", description: "" }]})}><Plus className="w-4 h-4 mr-2"/> Tambah Link Web</Button>
+                </div>
               </div>
-              <DialogFooter className="px-6 py-4 border-t bg-white flex-col sm:flex-row gap-2 shrink-0"><Button variant="outline" onClick={() => setProgramDialogOpen(false)} className="w-full sm:w-auto">Batal</Button><Button onClick={handleSaveProgram} disabled={isUploading} className="bg-orange-600 hover:bg-orange-700 text-white w-full sm:w-auto">Simpan Program</Button></DialogFooter>
+
+              <DialogFooter className="p-8 border-t border-slate-50 bg-white flex flex-row items-center justify-end gap-3 shrink-0">
+                  <Button variant="ghost" onClick={() => setProgramDialogOpen(false)} className="font-bold h-12 rounded-xl px-8 text-slate-400 hover:text-slate-700 hover:bg-[#f8f9fa]">Batal</Button>
+                  <Button onClick={handleSaveProgram} disabled={isUploading} className="bg-slate-900 hover:bg-slate-800 font-bold h-12 rounded-xl px-8 text-white shadow-sm">{isUploading ? <Loader2 className="w-5 h-5 animate-spin"/> : "Simpan Program"}</Button>
+              </DialogFooter>
           </DialogContent>
       </Dialog>
 
+      {/* 5. ANNOUNCEMENT EDITOR DIALOG */}
+      <Dialog open={announcementDialogOpen} onOpenChange={setAnnouncementDialogOpen}>
+          <DialogContent className="max-w-[95vw] w-full h-auto max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-[2rem] border border-slate-100 shadow-[0_20px_60px_rgb(0,0,0,0.08)] bg-white">
+              <DialogHeader className="px-8 py-6 border-b border-slate-50 shrink-0 flex flex-row items-center justify-between">
+                  <DialogTitle className="flex items-center gap-2 font-bold text-xl text-slate-800">Seting Pengumuman</DialogTitle>
+                  <Button variant="ghost" size="icon" onClick={() => setAnnouncementDialogOpen(false)} className="rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100"><X size={20}/></Button>
+              </DialogHeader>
+              
+              <div className="flex-1 flex flex-col md:flex-row overflow-y-auto">
+                  {/* LEFT CONFIG */}
+                  <div className="w-full md:w-[350px] bg-white p-8 border-b md:border-b-0 md:border-r border-slate-50 space-y-8 shrink-0 overflow-y-auto custom-scrollbar">
+                      <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Judul Pengumuman</Label><Input value={announcementForm.title} onChange={e => setAnnouncementForm({...announcementForm, title: e.target.value})} className="font-bold h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200" placeholder="Maintenance Sistem"/></div>
+                      
+                      <div className="space-y-3">
+                          <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Tipe Tampilan</Label>
+                          <div className="grid grid-cols-2 gap-3">
+                              <div onClick={() => setAnnouncementForm({...announcementForm, type: 'popup'})} className={cn("cursor-pointer border-2 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 transition-all", announcementForm.type === 'popup' ? "border-indigo-600 bg-white text-indigo-700 shadow-[0_4px_20px_rgb(79,70,229,0.12)]" : "border-slate-100 bg-[#f8f9fa] hover:bg-white text-slate-400 hover:text-slate-600")}>
+                                  <BellRing size={24}/>
+                                  <span className="font-bold text-[10px] uppercase tracking-widest">Modal Pop-up</span>
+                              </div>
+                              <div onClick={() => setAnnouncementForm({...announcementForm, type: 'marquee'})} className={cn("cursor-pointer border-2 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 transition-all", announcementForm.type === 'marquee' ? "border-indigo-600 bg-white text-indigo-700 shadow-[0_4px_20px_rgb(79,70,229,0.12)]" : "border-slate-100 bg-[#f8f9fa] hover:bg-white text-slate-400 hover:text-slate-600")}>
+                                  <MoveHorizontal size={24}/>
+                                  <span className="font-bold text-[10px] uppercase tracking-widest">Teks Berjalan</span>
+                              </div>
+                          </div>
+                      </div>
+
+                      {announcementForm.type === 'marquee' && (
+                          <div className="space-y-3 animate-in fade-in duration-300">
+                              <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Arah Gerak Teks</Label>
+                              <div className="flex bg-[#f8f9fa] p-1.5 rounded-2xl">
+                                  <Button size="sm" variant="ghost" onClick={() => setAnnouncementForm({...announcementForm, direction: 'left'})} className={cn("flex-1 h-11 rounded-xl font-bold", announcementForm.direction === 'left' ? "bg-white shadow-[0_2px_10px_rgb(0,0,0,0.04)] text-slate-800" : "text-slate-400")}><ArrowLeft className="w-4 h-4 mr-2"/> Ke Kiri</Button>
+                                  <Button size="sm" variant="ghost" onClick={() => setAnnouncementForm({...announcementForm, direction: 'right'})} className={cn("flex-1 h-11 rounded-xl font-bold", announcementForm.direction === 'right' ? "bg-white shadow-[0_2px_10px_rgb(0,0,0,0.04)] text-slate-800" : "text-slate-400")}>Ke Kanan <ArrowLeft className="w-4 h-4 ml-2 rotate-180"/></Button>
+                              </div>
+                          </div>
+                      )}
+
+                      <div className="flex items-center justify-between border-2 border-slate-100 p-5 rounded-2xl bg-white">
+                          <div>
+                              <Label className="font-bold text-slate-800 text-sm">Status Publish</Label>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Munculkan ke User?</p>
+                          </div>
+                          <Switch className="data-[state=checked]:bg-emerald-500 shadow-none border-slate-200" checked={announcementForm.is_active} onCheckedChange={(chk) => setAnnouncementForm({...announcementForm, is_active: chk})} />
+                      </div>
+                  </div>
+
+                  {/* RIGHT CANVAS */}
+                  <div className="flex-1 bg-[#f8f9fa] p-8 md:p-12 flex flex-col gap-6 overflow-y-auto custom-scrollbar relative">
+                      {announcementForm.content.length === 0 && (
+                          <div className="text-center text-slate-400 font-medium border-2 border-dashed border-slate-200 rounded-[2rem] flex flex-col items-center justify-center h-[300px] mt-10">
+                              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-5 shadow-sm"><FileCode className="w-8 h-8 text-slate-300"/></div>
+                              <p className="text-slate-700 font-bold text-lg">Isi Pengumuman Kosong</p>
+                              <p className="text-sm mt-1">Gunakan toolbar di bawah untuk membuat isi pengumuman.</p>
+                          </div>
+                      )}
+
+                      {announcementForm.content.map((block, idx) => (
+                          <div key={idx} className="bg-white border border-slate-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] rounded-[2rem] p-8 relative group animate-in slide-in-from-bottom-4 duration-500">
+                              <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-50">
+                                  <Badge className="bg-[#f8f9fa] text-slate-500 shadow-none border-none uppercase tracking-widest text-[9px] font-bold px-3 py-1.5 rounded-lg">Blok {block.type}</Badge>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50" onClick={() => removeAnnounceBlock(idx)}><Trash2 className="w-4 h-4"/></Button>
+                              </div>
+                              
+                              {/* --- RICH TEXT TOOLBAR --- */}
+                              {block.type === 'text' && (
+                                  <>
+                                    <div className="flex gap-1 mb-4 bg-[#f8f9fa] p-1.5 w-fit rounded-xl">
+                                        <Button size="icon" variant="ghost" className="h-9 w-9 rounded-lg text-slate-600 bg-white shadow-sm border border-slate-100" onClick={() => formatAnnounceText(idx, 'b', block.content)}><Bold className="w-4 h-4"/></Button>
+                                        <Button size="icon" variant="ghost" className="h-9 w-9 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white" onClick={() => formatAnnounceText(idx, 'i', block.content)}><Italic className="w-4 h-4"/></Button>
+                                        <Button size="icon" variant="ghost" className="h-9 w-9 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white" onClick={() => formatAnnounceText(idx, 'u', block.content)}><Underline className="w-4 h-4"/></Button>
+                                        <div className="w-px bg-slate-200 mx-1"></div>
+                                        <Button size="icon" variant="ghost" className="h-9 w-9 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-white" onClick={() => formatAnnounceText(idx, 'a', block.content)}><Link2 className="w-4 h-4"/></Button>
+                                    </div>
+                                    <Textarea id={`announce-text-${idx}`} value={block.content} onChange={(e) => updateAnnounceBlock(idx, "content", e.target.value)} placeholder="Ketik pengumuman di sini... (Bisa pakai tag HTML untuk link dll)" className="min-h-[150px] rounded-2xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200 text-base leading-relaxed p-6" />
+                                  </>
+                              )}
+                              {block.type === 'list' && (<div className="space-y-3"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Daftar Poin (1 baris = 1 poin)</Label><Textarea value={block.items?.join("\n")} onChange={(e) => updateAnnounceBlock(idx, "items_raw", e.target.value)} placeholder="Poin 1&#10;Poin 2" className="min-h-[150px] rounded-2xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200 font-medium p-6" /></div>)}
+                              {block.type === 'image' && (
+                                  <div className="flex flex-col sm:flex-row gap-8">
+                                      <div className="flex-1 space-y-5">
+                                          <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">URL Gambar</Label><Input value={block.src} onChange={(e) => updateAnnounceBlock(idx, "src", e.target.value)} placeholder="https://..." className="h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200" /></div>
+                                          <div className="space-y-2"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Deskripsi (Alt Text)</Label><Input value={block.alt} onChange={(e) => updateAnnounceBlock(idx, "alt", e.target.value)} placeholder="Keterangan..." className="h-12 rounded-xl border-transparent bg-[#f8f9fa] focus:bg-white focus:border-indigo-200" /></div>
+                                      </div>
+                                      {block.src && (
+                                          <div className="w-full sm:w-48 h-48 bg-[#f8f9fa] rounded-3xl border border-slate-100 flex items-center justify-center overflow-hidden shrink-0">
+                                              <img src={block.src} alt="Preview" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                                          </div>
+                                      )}
+                                  </div>
+                              )}
+                              {block.type === 'table' && (<div className="space-y-3"><Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Format CSV</Label><Textarea defaultValue={getTableAsCSV(block)} onBlur={(e) => updateAnnounceBlock(idx, "csv_raw", e.target.value)} placeholder="Header 1, Header 2&#10;Data A, Data B" className="min-h-[150px] rounded-2xl border-none bg-slate-900 text-emerald-400 font-mono text-sm p-6" /></div>)}
+                          </div>
+                      ))}
+
+                      {/* FLOATING TOOLBAR */}
+                      <div className="sticky bottom-0 mt-10 w-full flex justify-center pb-8 pt-4 pointer-events-none z-20">
+                          <div className="bg-white/90 backdrop-blur-xl p-2.5 rounded-[1.5rem] shadow-[0_20px_40px_rgb(0,0,0,0.08)] border border-slate-100 flex gap-2 pointer-events-auto">
+                              <Button variant="ghost" onClick={() => addAnnounceBlock('text')} className="h-12 px-5 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 font-bold text-slate-500"><AlignLeft className="w-4 h-4 sm:mr-2"/><span className="hidden sm:inline">Teks</span></Button>
+                              <div className="w-px bg-slate-100 my-2"></div>
+                              <Button variant="ghost" onClick={() => addAnnounceBlock('list')} className="h-12 px-5 rounded-xl hover:bg-emerald-50 hover:text-emerald-600 font-bold text-slate-500"><List className="w-4 h-4 sm:mr-2"/><span className="hidden sm:inline">List</span></Button>
+                              <div className="w-px bg-slate-100 my-2"></div>
+                              <Button variant="ghost" onClick={() => addAnnounceBlock('image')} className="h-12 px-5 rounded-xl hover:bg-rose-50 hover:text-rose-600 font-bold text-slate-500"><ImageIcon className="w-4 h-4 sm:mr-2"/><span className="hidden sm:inline">Gambar</span></Button>
+                              <div className="w-px bg-slate-100 my-2"></div>
+                              <Button variant="ghost" onClick={() => addAnnounceBlock('table')} className="h-12 px-5 rounded-xl hover:bg-amber-50 hover:text-amber-600 font-bold text-slate-500"><Grid3X3 className="w-4 h-4 sm:mr-2"/><span className="hidden sm:inline">Tabel</span></Button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+              <DialogFooter className="p-8 border-t border-slate-50 bg-white flex flex-row items-center justify-end gap-3 shrink-0">
+                  <Button variant="ghost" onClick={() => setAnnouncementDialogOpen(false)} className="font-bold h-12 rounded-xl px-8 text-slate-400 hover:text-slate-700 hover:bg-[#f8f9fa]">Batal</Button>
+                  <Button onClick={handleSaveAnnouncement} disabled={isUploading} className="bg-slate-900 hover:bg-slate-800 font-bold h-12 rounded-xl px-8 text-white shadow-sm">{isUploading ? <Loader2 className="w-5 h-5 animate-spin"/> : "Deploy Pengumuman"}</Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
+      
     </div>
   );
 };
+
+// --- HELPER UI COMPONENTS ---
+
+const NavItem = ({ icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) => (
+  <button
+    onClick={onClick}
+    className={cn(
+      "w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-[13px] font-bold transition-all duration-300 mb-1 border outline-none",
+      active 
+        ? "bg-indigo-50/80 text-indigo-700 border-indigo-100/50" 
+        : "bg-transparent border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+    )}
+  >
+    {icon}
+    {label}
+  </button>
+);
+
+const StatCard = ({ title, value, icon, badge, badgeColor, iconBg }: { title: string, value: string | number, icon: any, badge?: string, badgeColor?: string, iconBg: string }) => (
+  <Card className="border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] bg-white rounded-[2rem] overflow-hidden">
+     <CardContent className="p-8 flex flex-col justify-between h-full">
+        <div className="flex justify-between items-start mb-6">
+            <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center", iconBg)}>
+                {icon}
+            </div>
+            {badge && (
+                <div className={cn("px-2.5 py-1 rounded-lg text-[11px] font-bold", badgeColor)}>
+                    {badge}
+                </div>
+            )}
+        </div>
+        <div>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">{title}</p>
+            <p className="text-[32px] font-black tracking-tight text-slate-800">{value}</p>
+        </div>
+     </CardContent>
+  </Card>
+);
 
 export default AdminPage;

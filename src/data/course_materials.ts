@@ -53,6 +53,7 @@ export const getCourseMaterialsFromDB = async (levelId: string): Promise<CourseM
       .from("course_materials")
       .select("*")
       .eq("level_id", levelId)
+      .eq('status', 'published')
       .order("order_index", { ascending: true });
 
     if (error) {
