@@ -46,7 +46,9 @@ const categoryLabels: Record<string, string> = {
   craft: "Kerajinan & Konstruksi (Handwerk)",
   logistics: "Logistik & Transport",
   science: "Sains & Laboratorium",
-  social: "Sosial & Lingkungan"
+  social: "Sosial & Lingkungan",
+  media: "Media & Entertaiment",
+  lainnya: "Lainnya"
 };
 
 // --- DEFAULT PROGRAM ---

@@ -15,7 +15,7 @@ import {
   Loader2, UploadCloud, FileJson, LogOut, Plus, Trash2, Edit2, 
   Layers, BookOpen, Crown, BookText, FileCode, LayoutDashboard, Database,
   Menu, X, Home, ArrowLeft, UserCircle, HelpCircle, Save, AlignLeft, List, Grid3X3, Image as ImageIcon, GraduationCap,
-  ArrowUp, ArrowDown, Link as LinkIcon, RotateCcw, Search, AlertTriangle, MessageCircle, PenTool, CheckCircle2, Lightbulb, Megaphone, BellRing, MoveHorizontal,
+  ArrowUp, ArrowDown, Link as LinkIcon, RotateCcw, Search, AlertTriangle, Globe, MessageCircle, PenTool, CheckCircle2, Lightbulb, Megaphone, BellRing, MoveHorizontal,
   Bold, Italic, Underline, Link2, ChevronRight, MoreHorizontal
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -50,7 +50,9 @@ const defaultCategoryLabels: Record<string, string> = {
   craft: "Handwerk & Konstruksi",
   logistics: "Logistik & Transport",
   science: "Sains & Lab",
-  social: "Sosial & Lingkungan"
+  social: "Sosial & Lingkungan",
+  media: "Media & Entertaiment",
+  lainnya: "Lainnya"
 };
 
 const AdminPage = () => {
@@ -78,6 +80,8 @@ const AdminPage = () => {
   
   const [categoryList, setCategoryList] = useState<string[]>(Object.keys(defaultCategoryLabels));
   const [stats, setStats] = useState({ levels: 0, lessons: 0, vocabs: 0, materials: 0, questions: 0, programs: 0, announcements: 0 });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
@@ -315,6 +319,22 @@ const AdminPage = () => {
   useEffect(() => {
       if (selectedQuizId) { fetchQuizQuestions(selectedQuizId); setEditingQuestion(null); setQuizQuestionText(""); setQuizExplanation(""); }
   }, [selectedQuizId]);
+
+  const filteredPrograms = programs.filter(prog => {
+        const matchesSearch = prog.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            prog.description?.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        const matchesType = programFilter === "all" ? true :
+                            programFilter === "general" ? prog.category === "general" :
+                            prog.category !== "general"; // 'ausbildung' mode
+
+        const matchesCategory = categoryFilter === "all" ? true : prog.category === categoryFilter;
+
+        return matchesSearch && matchesType && matchesCategory;
+    });
+
+    const totalGeneral = programs.filter(p => p.category === "general").length;
+    const totalAusbildung = programs.filter(p => p.category !== "general").length;
 
   const handleMoveMaterial = async (item: CourseMaterialDB, direction: 'up' | 'down') => {
       const currentIndex = materials.findIndex(m => m.id === item.id);
@@ -658,123 +678,143 @@ const AdminPage = () => {
     } catch (err: any) { toast({ variant: "destructive", title: "Gagal Simpan", description: err.message }); } finally { setIsUploading(false); }
   };
 
-  const handleSmartImport = async () => {
-    if (!jsonInput) return;
-    setIsUploading(true);
-    try {
-        const data = JSON.parse(jsonInput);
-        if (importType === "vocab") {
-            let lessonId;
-            const { data: existingLesson } = await supabase.from("lessons").select("id").eq("slug", data.slug).maybeSingle();
-            
-            if(existingLesson) {
-                lessonId = existingLesson.id;
-            } else {
-                const { data: newLesson, error: createError } = await supabase.from("lessons").insert({
-                    level_id: data.level_id,
-                    slug: data.slug,
-                    title: data.title,
-                    order_index: data.order_index || 99
-                }).select().single();
-                if(createError) throw createError;
-                lessonId = newLesson.id;
-            }
+    const handleSmartImport = async () => {
+        if (!jsonInput) return;
+        setIsUploading(true);
+        try {
+            const rawData = JSON.parse(jsonInput);
+            // Menstandarisasi agar input selalu berupa Array, meskipun yang dimasukkan cuma 1 data
+            const items = Array.isArray(rawData) ? rawData : [rawData];
+            let totalImported = 0;
 
-            if (data.vocabulary?.length) {
-                const uniqueVocabs = data.vocabulary.filter((v: any, i: number, a: any[]) => a.findIndex((t:any) => t.german === v.german) === i);
-                for (const v of uniqueVocabs) {
-                    const { data: exist } = await supabase.from("vocabularies").select("id").eq("german", v.german).maybeSingle();
-                    if (!exist) {
-                        await supabase.from("vocabularies").insert({ 
-                            lesson_id: lessonId, 
-                            german: v.german, 
-                            indonesian: v.indonesian, 
-                            example: v.example,
-                            category: v.category || 'noun' 
+            for (const item of items) {
+                // --- 1. VOCAB & LESSON ---
+                if (importType === "vocab") {
+                    let lessonId;
+                    const { data: existingLesson } = await supabase.from("lessons").select("id").eq("slug", item.slug).maybeSingle();
+                    
+                    if (existingLesson) {
+                        lessonId = existingLesson.id;
+                    } else {
+                        const { data: newLesson, error: createError } = await supabase.from("lessons").insert({
+                            level_id: item.level_id,
+                            slug: item.slug,
+                            title: item.title,
+                            order_index: item.order_index || 99
+                        }).select().single();
+                        if (createError) throw createError;
+                        lessonId = newLesson.id;
+                    }
+
+                    if (item.vocabulary?.length) {
+                        const uniqueVocabs = item.vocabulary.filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.german === v.german) === i);
+                        for (const v of uniqueVocabs) {
+                            const { data: exist } = await supabase.from("vocabularies").select("id").eq("german", v.german).maybeSingle();
+                            if (!exist) {
+                                await supabase.from("vocabularies").insert({ 
+                                    lesson_id: lessonId, german: v.german, indonesian: v.indonesian, example: v.example, category: v.category || 'noun' 
+                                });
+                            }
+                        }
+                    }
+
+                    if (item.dialogs?.length) {
+                        for (const d of item.dialogs) {
+                            const { data: newDialog } = await supabase.from("dialogs").insert({ lesson_id: lessonId, title: d.title }).select().single();
+                            if (d.lines?.length && newDialog) {
+                                const linesPayload = d.lines.map((l: any, i: number) => ({ 
+                                    dialog_id: newDialog.id, speaker: l.speaker, german: l.german, indonesian: l.indonesian, order_index: i 
+                                }));
+                                await supabase.from("dialog_lines").insert(linesPayload);
+                            }
+                        }
+                    }
+
+                    if (item.exercises?.length) {
+                        const exPayload = item.exercises.map((e: any) => ({
+                            lesson_id: lessonId, question: e.question, options: e.options, correct_answer: e.correct_answer 
+                        }));
+                        await supabase.from("exercises").insert(exPayload);
+                    }
+                }
+
+                // --- 2. MATERIAL BACAAN ---
+                else if (importType === "material") {
+                    const { data: existingMat } = await supabase.from("course_materials").select("id").eq("section_id", item.section_id).maybeSingle();
+                    if (existingMat) {
+                        await supabase.from("course_materials").update({ 
+                            title: item.title, content: item.content, level_id: item.level_id, order_index: item.order_index 
+                        }).eq("id", existingMat.id);
+                    } else {
+                        await supabase.from("course_materials").insert({
+                            level_id: item.level_id, section_id: item.section_id, title: item.title, order_index: item.order_index || 99, content: item.content
                         });
                     }
                 }
-            }
 
-            if (data.dialogs?.length) {
-                for (const d of data.dialogs) {
-                    const { data: newDialog } = await supabase.from("dialogs").insert({ lesson_id: lessonId, title: d.title }).select().single();
-                    if (d.lines?.length && newDialog) {
-                        const linesPayload = d.lines.map((l: any, i: number) => ({ 
-                            dialog_id: newDialog.id, speaker: l.speaker, german: l.german, indonesian: l.indonesian, order_index: i 
-                        }));
-                        await supabase.from("dialog_lines").insert(linesPayload);
+                // --- 3. PROGRAM STUDI ---
+                else if (importType === "program") {
+                    const { error: progError } = await supabase.from('programs').upsert({ 
+                        id: item.id, title: item.title, category: item.category, description: item.description, 
+                        salary: item.salary, duration: item.duration, source: item.source, 
+                        what_you_learn: item.what_you_learn || item.whatYouLearn 
+                    });
+                    if (progError) throw progError;
+
+                    if (item.requirements?.length) {
+                        const reqPayload = item.requirements.map((r: any) => ({ program_id: item.id, req_id: r.id || r.req_id, label: r.label, note: r.note }));
+                        await supabase.from('program_requirements').delete().eq('program_id', item.id);
+                        await supabase.from('program_requirements').insert(reqPayload);
+                    }
+                    if (item.usefulLinks?.length || item.links?.length) {
+                        const linksSource = item.usefulLinks || item.links;
+                        const linkPayload = linksSource.map((l: any) => ({ program_id: item.id, label: l.label, url: l.url, description: l.description }));
+                        await supabase.from('program_links').delete().eq('program_id', item.id);
+                        await supabase.from('program_links').insert(linkPayload);
                     }
                 }
+
+                // --- 4. QUIZ EDITOR ---
+                else if (importType === "quiz") {
+                    let quizId;
+                    const { data: existingQuiz } = await supabase.from("quizzes").select("id").eq("level", item.level).maybeSingle();
+                    
+                    if (existingQuiz) {
+                        quizId = existingQuiz.id;
+                        await supabase.from("quizzes").update({ title: item.title }).eq("id", quizId);
+                    } else {
+                        const { data: newQuiz, error: qErr } = await supabase.from("quizzes").insert({ level: item.level, title: item.title }).select().single();
+                        if (qErr) throw qErr;
+                        quizId = newQuiz.id;
+                    }
+
+                    if (item.questions?.length) {
+                        const questionsPayload = item.questions.map((q: any, idx: number) => ({ 
+                            quiz_id: quizId, question: q.question, type: q.type, options: q.options || null, 
+                            correct_answer: q.correct_answer, explanation: q.explanation || "", order_index: idx + 1 
+                        }));
+                        // Hapus soal lama jika ingin mereplace seluruh kuis
+                        await supabase.from("quiz_questions").delete().eq("quiz_id", quizId);
+                        const { error: qError } = await supabase.from("quiz_questions").insert(questionsPayload);
+                        if (qError) throw qError;
+                    }
+                }
+                totalImported++;
             }
 
-            if (data.exercises?.length) {
-                const exPayload = data.exercises.map((e: any) => ({
-                    lesson_id: lessonId,
-                    question: e.question,
-                    options: e.options, 
-                    correct_answer: e.correct_answer 
-                }));
-                await supabase.from("exercises").insert(exPayload);
-            }
+            toast({ title: "Bulk Import Berhasil! ✅", description: `${totalImported} data ${importType} telah diproses.` });
+            setJsonInput(""); 
+            fetchStats();
+            if (importType === "program") fetchPrograms();
+            if (importType === "quiz") fetchQuizzes();
 
-            toast({ title: "Full Import Berhasil", description: `Bab '${data.title}' lengkap dengan Materi & Latihan!` });
-
-        } else if (importType === "material") {
-            const { data: existingMat } = await supabase.from("course_materials").select("id").eq("section_id", data.section_id).maybeSingle();
-            if (existingMat) {
-                await supabase.from("course_materials").update({ 
-                    title: data.title, content: data.content, level_id: data.level_id, order_index: data.order_index 
-                }).eq("id", existingMat.id);
-            } else {
-                await supabase.from("course_materials").insert({
-                    level_id: data.level_id, section_id: data.section_id, title: data.title, order_index: data.order_index || 99, content: data.content
-                });
-            }
-            toast({ title: "Import Berhasil", description: `Materi '${data.title}' disimpan.` });
-
-        } else if (importType === "program") {
-             const { error: progError } = await supabase.from('programs').upsert({ id: data.id, title: data.title, category: data.category, description: data.description, salary: data.salary, duration: data.duration, source: data.source, what_you_learn: data.whatYouLearn });
-            if (progError) throw progError;
-            if (data.requirements?.length) {
-                const reqPayload = data.requirements.map((r: any) => ({ program_id: data.id, req_id: r.id, label: r.label, note: r.note }));
-                await supabase.from('program_requirements').delete().eq('program_id', data.id);
-                await supabase.from('program_requirements').insert(reqPayload);
-            }
-            if (data.usefulLinks?.length) {
-                const linkPayload = data.usefulLinks.map((l: any) => ({ program_id: data.id, label: l.label, url: l.url, description: l.description }));
-                await supabase.from('program_links').delete().eq('program_id', data.id);
-                await supabase.from('program_links').insert(linkPayload);
-            }
-            toast({ title: "Import Program Sukses!", description: `Program '${data.title}' disimpan.` });
-            fetchPrograms();
-
-        } else if (importType === "quiz") {
-            let quizId;
-            const { data: existingQuiz } = await supabase.from("quizzes").select("id").eq("level", data.level).maybeSingle();
-            
-            if(existingQuiz) {
-                quizId = existingQuiz.id;
-                await supabase.from("quizzes").update({ title: data.title }).eq("id", quizId);
-            } else {
-                const { data: newQuiz, error: qErr } = await supabase.from("quizzes").insert({ level: data.level, title: data.title }).select().single();
-                if(qErr) throw qErr;
-                quizId = newQuiz.id;
-            }
-
-            const questionsPayload = data.questions.map((q: any, idx: number) => ({ quiz_id: quizId, question: q.question, type: q.type, options: q.options || null, correct_answer: q.correct_answer, explanation: q.explanation || "", order_index: idx + 1 }));
-            const { error: qError } = await supabase.from("quiz_questions").insert(questionsPayload);
-            if (qError) throw qError;
-            toast({ title: "Import Quiz Sukses!", description: `${data.questions.length} soal ditambahkan.` });
-            fetchQuizzes();
+        } catch (e: any) { 
+            console.error(e);
+            toast({ variant: "destructive", title: "Gagal Import ❌", description: e.message }); 
+        } finally { 
+            setIsUploading(false); 
         }
-        setJsonInput(""); fetchStats();
-    } catch (e: any) { 
-        toast({ variant: "destructive", title: "Gagal Import", description: e.message }); 
-    } finally { 
-        setIsUploading(false); 
-    }
-  };
+    };
 
   const getPlaceholder = () => { 
       if (importType === "vocab") return `{\n "level_id": "A1",\n "slug": "a1-perkenalan",\n "title": "Perkenalan Diri",\n "vocabulary": [\n  {"german": "Hallo", "indonesian": "Halo", "example": "Hallo, wie geht's?", "category": "phrase"},\n  {"german": "der Tisch", "indonesian": "Meja", "example": "Das ist ein Tisch.", "category": "noun"}\n ]\n}`;
@@ -1321,56 +1361,139 @@ const AdminPage = () => {
 
             {/* --- 5. PROGRAM STUDI --- */}
             {activeMenu === "program" && (
-                <div className="space-y-10 animate-in fade-in duration-300">
-                    <div className="flex flex-col gap-1">
-                        <h1 className="text-[32px] font-bold text-slate-800 tracking-tight">Program Studi</h1>
-                        <p className="text-slate-400 text-sm">Kelola program Ausbildung, Au Pair, Studi, dll.</p>
+                <div className="space-y-8 animate-in fade-in duration-500">
+                    {/* 1. HEADER SECTION */}
+                    <div className="space-y-2">
+                        <h1 className="text-[28px] font-bold text-slate-900 tracking-tight">Program Studi</h1>
+                        <p className="text-slate-500 text-sm">Lihat dan kelola semua kategori program studi di berbagai bidang. Gunakan filter untuk mencari program spesifik.</p>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-4 mt-8">
-                        <div className="flex flex-wrap gap-2">
-                            <button onClick={() => setProgramFilter("all")} className={cn("px-6 py-2.5 rounded-2xl text-sm font-bold transition-all border", programFilter === "all" ? "bg-white border-indigo-600 text-indigo-600 shadow-[0_4px_20px_rgb(79,70,229,0.12)]" : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600 shadow-[0_2px_10px_rgb(0,0,0,0.02)]")}>Semua</button>
-                            <button onClick={() => setProgramFilter("general")} className={cn("px-6 py-2.5 rounded-2xl text-sm font-bold transition-all border", programFilter === "general" ? "bg-white border-indigo-600 text-indigo-600 shadow-[0_4px_20px_rgb(79,70,229,0.12)]" : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600 shadow-[0_2px_10px_rgb(0,0,0,0.02)]")}>Umum</button>
-                            <button onClick={() => setProgramFilter("ausbildung")} className={cn("px-6 py-2.5 rounded-2xl text-sm font-bold transition-all border", programFilter === "ausbildung" ? "bg-white border-indigo-600 text-indigo-600 shadow-[0_4px_20px_rgb(79,70,229,0.12)]" : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 hover:text-slate-600 shadow-[0_2px_10px_rgb(0,0,0,0.02)]")}>Ausbildung</button>
+                    {/* 2. STATS ROW (Clean Style) */}
+                    <div className="flex flex-wrap gap-12 py-6 border-y border-slate-100">
+                        <div>
+                            <p className="text-slate-500 text-[13px] font-medium mb-1">Total Program</p>
+                            <p className="text-3xl font-bold text-slate-900">{programs.length}</p>
+                        </div>
+                        <div className="border-l border-slate-100 pl-12">
+                            <p className="text-slate-500 text-[13px] font-medium mb-1">Umum</p>
+                            <p className="text-3xl font-bold text-indigo-600">{totalGeneral}</p>
+                        </div>
+                        <div className="border-l border-slate-100 pl-12">
+                            <p className="text-slate-500 text-[13px] font-medium mb-1">Ausbildung</p>
+                            <p className="text-3xl font-bold text-emerald-600">{totalAusbildung}</p>
+                        </div>
+                        <div className="border-l border-slate-100 pl-12">
+                            <p className="text-slate-500 text-[13px] font-medium mb-1">Hasil Pencarian</p>
+                            <p className="text-3xl font-bold text-amber-500">{filteredPrograms.length}</p>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <button onClick={() => openProgramDialog(null)} className="h-auto min-h-[260px] rounded-[2rem] border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-white transition-all flex flex-col items-center justify-center text-slate-400 hover:text-indigo-600 gap-4 group">
-                            <div className="w-16 h-16 bg-white shadow-sm border border-slate-100 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform"><Plus className="w-6 h-6"/></div>
-                            <span className="font-bold">Tambah Program</span>
-                        </button>
-                        
-                        {programs.filter(prog => {
-                            if (programFilter === "general") return prog.category === "general";
-                            if (programFilter === "ausbildung") return prog.category !== "general";
-                            return true;
-                        }).map((prog) => (
-                            <div key={prog.id} className="bg-white border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] rounded-[2rem] p-8 flex flex-col h-full min-h-[260px] relative overflow-hidden hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-shadow">
-                                <div className="flex justify-between items-start mb-6">
-                                    <Badge className="bg-slate-50 text-slate-600 border border-slate-200 shadow-none font-bold uppercase text-[10px] px-3 py-1.5 rounded-lg">{prog.category || "General"}</Badge>
-                                    <code className="text-[10px] font-mono font-bold text-slate-300">{prog.id}</code>
-                                </div>
-                                <h3 className="font-bold text-xl mb-3 text-slate-800 line-clamp-2">{prog.title}</h3>
-                                <p className="text-sm text-slate-400 mb-6 flex-grow line-clamp-3 font-medium">{prog.description}</p>
-                                
-                                <div className="grid grid-cols-2 gap-3 mb-6">
-                                    <div className="bg-[#f8f9fa] p-3 rounded-xl">
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Gaji</p>
-                                        <p className="text-xs font-bold text-slate-700 truncate">{prog.salary || "-"}</p>
-                                    </div>
-                                    <div className="bg-[#f8f9fa] p-3 rounded-xl">
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Durasi</p>
-                                        <p className="text-xs font-bold text-slate-700 truncate">{prog.duration || "-"}</p>
-                                    </div>
-                                </div>
+                    {/* 3. FILTER PANEL (The "Manage Questions" Look) */}
+                    <Card className="p-8 border-slate-200 shadow-sm bg-white rounded-xl">
+                        {/* HEADER SECTION: Sekarang tombol dipindah ke sini dan dibuat sejajar (flex) */}
+                        <div className="flex items-start justify-between mb-8">
+                            <div className="space-y-1">
+                                <h3 className="text-lg font-bold text-slate-900">Filters</h3>
+                                <p className="text-slate-400 text-[13px]">Persempit hasil pencarian Anda dengan menerapkan filter di bawah ini</p>
+                            </div>
+                            
+                            {/* Tombol Tambah Program - Sekarang berada di kanan atas sejajar dengan judul */}
+                            <Button onClick={() => openProgramDialog(null)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-11 px-6 rounded-lg shrink-0">
+                                <Plus className="w-4 h-4 mr-2"/> Tambah Program Baru
+                            </Button>
+                        </div>
 
-                                <div className="mt-auto flex gap-2">
-                                    <Button onClick={() => openProgramDialog(prog)} variant="outline" className="flex-1 h-11 font-bold border-slate-200 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl"><Edit2 className="w-4 h-4 mr-2"/> Edit</Button>
-                                    <Button onClick={() => confirmDelete(prog, "program")} variant="outline" size="icon" className="h-11 w-11 border-slate-200 text-slate-400 hover:text-red-600 hover:bg-red-50 hover:border-red-200 rounded-xl shrink-0"><Trash2 className="w-4 h-4"/></Button>
+                        {/* GRID INPUT - Tetap sama seperti kodemu sebelumnya */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                            {/* Search Input */}
+                            <div className="space-y-2">
+                                <Label className="text-[13px] font-bold text-slate-700">Cari Nama Program</Label>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+                                    <Input 
+                                        placeholder="e.g., Perawat, IT..." 
+                                        className="pl-10 h-11 border-slate-200 focus:ring-0 focus:border-slate-900"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                    />
                                 </div>
                             </div>
-                        ))}
+
+                            {/* Type Filter */}
+                            <div className="space-y-2">
+                                <Label className="text-[13px] font-bold text-slate-700">Tipe Program</Label>
+                                <Select value={programFilter} onValueChange={(val: any) => {setProgramFilter(val); setCategoryFilter("all");}}>
+                                    <SelectTrigger className="h-11 border-slate-200">
+                                        <SelectValue placeholder="Semua Tipe" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Semua Tipe</SelectItem>
+                                        <SelectItem value="general">Umum</SelectItem>
+                                        <SelectItem value="ausbildung">Ausbildung</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* Category Filter */}
+                            <div className="space-y-2">
+                                <Label className="text-[13px] font-bold text-slate-700">Bidang / Kategori</Label>
+                                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                                    <SelectTrigger className="h-11 border-slate-200">
+                                        <SelectValue placeholder="Semua Bidang" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Semua Bidang</SelectItem>
+                                        {categoryList.map(cat => (
+                                            <SelectItem key={cat} value={cat}>{defaultCategoryLabels[cat] || cat}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* Info */}
+                            <div className="space-y-2 flex flex-col justify-end pb-1">
+                                <p className="text-[11px] text-slate-400 italic">Menampilkan {filteredPrograms.length} dari {programs.length} data tersedia.</p>
+                            </div>
+                        </div>
+                        
+                        {/* Bagian bawah (Filter Actions) dihapus karena tombol sudah pindah ke atas */}
+                    </Card>
+
+                    {/* 4. RESULTS TABLE / GRID */}
+                    <div className="space-y-4">
+                        {filteredPrograms.length === 0 ? (
+                            <div className="py-20 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                <p className="text-slate-400 font-medium">Tidak ada program yang sesuai dengan filter Anda.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {filteredPrograms.map((prog) => (
+                                    <div key={prog.id} className="bg-white border border-slate-200 rounded-xl p-6 hover:shadow-md transition-all group">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <Badge variant="outline" className="text-[10px] font-bold uppercase text-slate-400 border-slate-200">
+                                                {prog.category}
+                                            </Badge>
+                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-indigo-600" onClick={() => openProgramDialog(prog)}><Edit2 size={14}/></Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500" onClick={() => confirmDelete(prog, "program")}><Trash2 size={14}/></Button>
+                                            </div>
+                                        </div>
+                                        <h4 className="font-bold text-slate-900 mb-2 line-clamp-1">{prog.title}</h4>
+                                        <p className="text-xs text-slate-500 line-clamp-2 mb-4 leading-relaxed">{prog.description}</p>
+                                        <div className="flex gap-4 pt-4 border-t border-slate-50">
+                                            <div>
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Gaji</p>
+                                                <p className="text-xs font-bold text-slate-700">{prog.salary || "-"}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Durasi</p>
+                                                <p className="text-xs font-bold text-slate-700">{prog.duration || "-"}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
