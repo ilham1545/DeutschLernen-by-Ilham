@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 // Import Halaman
 import Index from "./pages/Index";
@@ -151,6 +152,7 @@ const App = () => (
             <MainLayout />
         </AuthProvider>
       </BrowserRouter>
+      <SpeedInsights />
     </TooltipProvider>
   </QueryClientProvider>
 );
